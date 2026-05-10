@@ -1,0 +1,719 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClientFinder | Lead Database</title>
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    /* ── Leads-page additions ── */
+    .leads-main { display: flex; flex-direction: column; gap: 0; }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      padding: 16px 32px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: all 0.15s;
+    }
+    .stat-pill:hover { opacity: 0.8; }
+    .stat-pill.hot  { background: rgba(220,38,38,0.1);  color: #dc2626; border-color: rgba(220,38,38,0.25); }
+    .stat-pill.warm { background: rgba(234,88,12,0.1);  color: #ea580c; border-color: rgba(234,88,12,0.25); }
+    .stat-pill.cold { background: rgba(37,99,235,0.1);  color: #2563eb; border-color: rgba(37,99,235,0.25); }
+    .stat-pill.rev  { background: rgba(202,138,4,0.1);  color: #ca8a04; border-color: rgba(202,138,4,0.25); }
+    .stat-pill.fu   { background: rgba(22,163,74,0.1);  color: #16a34a; border-color: rgba(22,163,74,0.25); }
+    .stat-pill .pill-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .stat-pill.hot  .pill-dot { background: #dc2626; }
+    .stat-pill.warm .pill-dot { background: #ea580c; }
+    .stat-pill.cold .pill-dot { background: #2563eb; }
+    .stat-pill.rev  .pill-dot { background: #ca8a04; }
+    .stat-pill.fu   .pill-dot { background: #16a34a; }
+    .stat-pill .pill-num { font-size: 0.9rem; font-weight: 700; }
+
+    /* Tabs */
+    .tabs-bar {
+      display: flex;
+      gap: 2px;
+      padding: 12px 32px 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 6px 6px 0 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--surface-2); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+    .tab-count {
+      font-size: 0.7rem;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      font-weight: 700;
+    }
+    .tab-btn.active .tab-count { background: var(--accent); color: #fff; }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      padding: 12px 32px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-bar input[type="text"] { width: 200px; }
+    .filter-bar select { min-width: 130px; }
+    .filter-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .filter-chip input { cursor: pointer; }
+
+    /* Followup banner */
+    .fu-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 32px;
+      background: rgba(202,138,4,0.08);
+      border-bottom: 1px solid rgba(202,138,4,0.2);
+      font-size: 0.82rem;
+      color: #92400e;
+    }
+    .fu-banner button {
+      padding: 4px 12px;
+      background: #ca8a04;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    /* Table */
+    .table-surface { overflow: hidden; }
+    .table-scroll { overflow-x: auto; }
+    .leads-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .leads-table thead tr {
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .leads-table th {
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .leads-table th.col-cb { width: 36px; }
+    .leads-table th.col-dot { width: 20px; padding: 0; }
+    .leads-table th.col-score { width: 60px; text-align: center; }
+    .leads-table th.col-source { width: 100px; }
+    .leads-table th.col-city { width: 100px; }
+    .leads-table th.col-status { width: 110px; }
+    .leads-table th.col-pain { width: 110px; }
+    .leads-table th.col-time { width: 80px; }
+
+    .leads-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .leads-table tbody tr:hover { background: var(--surface-2); }
+    .leads-table tbody tr.selected { background: rgba(139,90,43,0.06); }
+    .leads-table tbody tr.detail-open { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+
+    .leads-table td {
+      padding: 10px 12px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 0;
+    }
+    .leads-table td.col-cb,
+    .leads-table td.col-dot { max-width: unset; overflow: visible; }
+    .leads-table td.col-cb { width: 36px; }
+
+    .col-name { min-width: 180px; }
+    .td-name { font-weight: 600; color: var(--text); }
+
+    .score-badge {
+      display: inline-block;
+      font-weight: 700;
+      font-size: 0.82rem;
+      text-align: center;
+      width: 36px;
+    }
+    .score-badge.hot  { color: #dc2626; }
+    .score-badge.warm { color: #ea580c; }
+    .score-badge.cold { color: #2563eb; }
+
+    .label-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .label-dot.hot  { background: #dc2626; }
+    .label-dot.warm { background: #ea580c; }
+    .label-dot.cold { background: #2563eb; }
+
+    .source-tag {
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: lowercase;
+    }
+    .status-pill {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .status-pill.New       { background: rgba(37,99,235,0.1);  color: #2563eb; }
+    .status-pill.Contacted { background: rgba(22,163,74,0.1);  color: #16a34a; }
+    .status-pill.Replied   { background: rgba(124,58,237,0.1); color: #7c3aed; }
+    .status-pill.Meeting   { background: rgba(234,88,12,0.1);  color: #ea580c; }
+    .status-pill.Closed    { background: rgba(22,163,74,0.15); color: #15803d; }
+    .status-pill.Dead      { background: rgba(220,38,38,0.1);  color: #dc2626; }
+
+    .pain-tag {
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(124,58,237,0.1);
+      color: #7c3aed;
+      font-weight: 500;
+    }
+    .time-tag { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* Empty state */
+    .empty-row td { text-align: center; padding: 48px; color: var(--text-muted); font-size: 0.9rem; }
+
+    /* Pagination */
+    .pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .pagination-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pagination-btn:not(:disabled):hover { background: var(--surface-2); }
+    .pag-btns { display: flex; gap: 6px; }
+
+    /* Bulk bar */
+    .bulk-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-2);
+      flex-wrap: wrap;
+    }
+    .bulk-bar.show { display: flex; }
+    .bulk-label { font-size: 0.8rem; font-weight: 600; color: var(--text); margin-right: 4px; }
+    .bulk-btn {
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .bulk-btn:hover { background: var(--surface-2); }
+    .bulk-btn.danger { color: #dc2626; border-color: rgba(220,38,38,0.3); }
+    .bulk-btn.success { color: #16a34a; border-color: rgba(22,163,74,0.3); }
+
+    /* Detail panel */
+    .detail-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 380px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      transform: translateX(100%);
+      transition: transform 0.2s ease;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+    }
+    .detail-panel.open { transform: translateX(0); }
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .detail-header h3 { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .detail-close {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .detail-close:hover { color: var(--text); }
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Detail sections */
+    .d-section { display: flex; flex-direction: column; gap: 8px; }
+    .d-section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .d-company-name { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .d-meta { font-size: 0.78rem; color: var(--text-muted); }
+    .d-label-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+    .d-lbl {
+      padding: 3px 10px; border-radius: 10px;
+      font-size: 0.72rem; font-weight: 700; color: #fff;
+    }
+    .d-lbl.hot  { background: #dc2626; }
+    .d-lbl.warm { background: #ea580c; }
+    .d-lbl.cold { background: #2563eb; }
+    .d-score-num { font-size: 1.1rem; font-weight: 800; }
+    .d-score-num.hot  { color: #dc2626; }
+    .d-score-num.warm { color: #ea580c; }
+    .d-score-num.cold { color: #2563eb; }
+
+    /* Score bars */
+    .score-row { display: flex; flex-direction: column; gap: 6px; }
+    .score-bar-item { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; }
+    .score-bar-label { width: 50px; color: var(--text-muted); flex-shrink: 0; }
+    .score-bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 3px; }
+    .score-bar-val { width: 26px; text-align: right; font-weight: 700; color: var(--text); }
+
+    /* Contact buttons */
+    .contact-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .contact-btn {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 500;
+      position: relative;
+      transition: all 0.15s;
+    }
+    .contact-btn:hover { background: var(--border); }
+    .contact-btn.wa { border-color: rgba(37,211,102,0.4); color: #16a34a; }
+    .contact-btn.wa:hover { background: rgba(37,211,102,0.08); }
+    .copied-tip {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1c1917;
+      color: #fff;
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      animation: tipFade 1.5s forwards;
+    }
+    @keyframes tipFade { 0%,60%{opacity:1} 100%{opacity:0} }
+
+    /* Pain chips */
+    .pain-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .pain-chip {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      background: rgba(124,58,237,0.1);
+      color: #7c3aed;
+    }
+
+    /* Status select in panel */
+    .d-status-select {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 0.82rem;
+    }
+
+    /* Followup in panel */
+    .fu-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .fu-row input[type="date"],
+    .fu-row input[type="text"] {
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 0.78rem;
+    }
+    .fu-row input[type="date"] { width: 135px; }
+    .fu-row input[type="text"] { flex: 1; min-width: 80px; }
+    .fu-set-btn {
+      padding: 6px 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .fu-confirm { font-size: 0.72rem; color: #16a34a; margin-top: 2px; }
+
+    /* Review btns */
+    .review-row { display: flex; gap: 8px; }
+    .review-approve {
+      flex: 1; padding: 7px; border: none; border-radius: 6px;
+      background: rgba(22,163,74,0.12); color: #16a34a;
+      font-weight: 600; font-size: 0.8rem; cursor: pointer;
+    }
+    .review-approve:hover { background: rgba(22,163,74,0.2); }
+    .review-reject {
+      flex: 1; padding: 7px; border: none; border-radius: 6px;
+      background: rgba(220,38,38,0.1); color: #dc2626;
+      font-weight: 600; font-size: 0.8rem; cursor: pointer;
+    }
+    .review-reject:hover { background: rgba(220,38,38,0.18); }
+
+    /* AI analysis */
+    .ai-field { margin-bottom: 8px; }
+    .ai-field dt { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .ai-field dd {
+      font-size: 0.78rem;
+      color: var(--text);
+      background: var(--surface-2);
+      border-radius: 6px;
+      padding: 7px 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    /* Message boxes */
+    .msg-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 0.75rem;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+      position: relative;
+    }
+    .msg-copy {
+      margin-top: 5px;
+      padding: 3px 10px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+    .msg-copy:hover { color: var(--text); }
+
+    /* Collapsible AI section */
+    .collapsible-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .collapsible-arrow { font-size: 0.8rem; color: var(--text-muted); transition: transform 0.2s; }
+    .collapsible-arrow.open { transform: rotate(180deg); }
+    .collapsible-body { display: none; margin-top: 8px; }
+    .collapsible-body.open { display: block; }
+
+    /* Toast */
+    .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: #fff;
+      animation: toastIn 0.25s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    @keyframes toastIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+    .toast.success { background: #16a34a; }
+    .toast.error   { background: #dc2626; }
+    .toast.info    { background: #2563eb; }
+
+    /* Hero actions */
+    .hero-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .stats-row { padding: 12px 16px; }
+      .tabs-bar { padding: 10px 16px 0; }
+      .filter-bar { padding: 10px 16px; }
+      .fu-banner { padding: 8px 16px; }
+      .detail-panel { width: 100%; }
+      .leads-table th.col-pain,
+      .leads-table td.col-pain,
+      .leads-table th.col-time,
+      .leads-table td.col-time { display: none; }
+    }
+  </style>
+</head>
+<body data-page="leads">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <p class="kicker">Broader AI</p>
+        <h1>ClientFinder</h1>
+        <p class="sidebar-copy">Manage, filter, and act on your discovered leads.</p>
+      </div>
+
+      <nav class="nav-links">
+        <a href="./index.html" class="nav-link">Run Search</a>
+        <a href="./leads.html" class="nav-link active">Saved Leads</a>
+        <a href="./ops.html" class="nav-link">Operations</a>
+      </nav>
+
+      <div class="sidebar-card">
+        <label for="apiBase" class="field-label">Backend URL</label>
+        <div class="backend-inline">
+          <input id="apiBase" type="text" value="http://127.0.0.1:7000" aria-label="API base URL">
+          <button id="healthBtn" class="ghost-btn" type="button">Check</button>
+        </div>
+        <p id="healthStatus" class="helper-text">Waiting for backend check.</p>
+      </div>
+
+      <div class="sidebar-card" style="margin-top: auto;">
+        <p class="field-label" style="margin-bottom:6px">Lead Summary</p>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+            <span style="color:#dc2626;font-weight:600">HOT</span>
+            <span id="sbHot" style="font-weight:700;color:var(--text)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+            <span style="color:#ea580c;font-weight:600">WARM</span>
+            <span id="sbWarm" style="font-weight:700;color:var(--text)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+            <span style="color:#2563eb;font-weight:600">COLD</span>
+            <span id="sbCold" style="font-weight:700;color:var(--text)">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+            <span style="color:#ca8a04;font-weight:600">Review</span>
+            <span id="sbReview" style="font-weight:700;color:var(--text)">0</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-shell leads-main">
+
+      <!-- Hero -->
+      <section class="hero-surface">
+        <div>
+          <p class="kicker">Lead Database</p>
+          <h2>Saved Leads</h2>
+          <p class="section-copy">View, filter, update status, and export your lead data.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="refreshBtn" class="secondary-btn" type="button" onclick="fetchAll()">Refresh</button>
+          <button id="dmToggle" class="ghost-btn" title="Toggle theme">Theme</button>
+        </div>
+      </section>
+
+      <!-- Follow-up banner -->
+      <div class="fu-banner" id="fuBanner">
+        <span>Today's follow-ups:</span>
+        <strong id="fuBannerText">0 due</strong>
+        <button onclick="viewFollowups()">View</button>
+      </div>
+
+      <!-- Stats pills -->
+      <div class="stats-row">
+        <div class="stat-pill hot" onclick="switchTab('HOT')">
+          <span class="pill-dot"></span>
+          <span>HOT</span>
+          <span class="pill-num" id="statHot">0</span>
+        </div>
+        <div class="stat-pill warm" onclick="switchTab('WARM')">
+          <span class="pill-dot"></span>
+          <span>WARM</span>
+          <span class="pill-num" id="statWarm">0</span>
+        </div>
+        <div class="stat-pill cold" onclick="switchTab('COLD')">
+          <span class="pill-dot"></span>
+          <span>COLD</span>
+          <span class="pill-num" id="statCold">0</span>
+        </div>
+        <div class="stat-pill rev" onclick="switchTab('REVIEW')">
+          <span class="pill-dot"></span>
+          <span>Review</span>
+          <span class="pill-num" id="statReview">0</span>
+        </div>
+        <div class="stat-pill fu" id="statFuPill" style="display:none" onclick="viewFollowups()">
+          <span class="pill-dot"></span>
+          <span>Due Today</span>
+          <span class="pill-num" id="statFu">0</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-bar" id="tabsBar"></div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <input type="text" id="fSearch" placeholder="Search company...">
+        <select id="fCity"><option value="">All Cities</option></select>
+        <select id="fSource"><option value="">All Sources</option></select>
+        <select id="fSort">
+          <option value="score_desc">Score: High to Low</option>
+          <option value="score_asc">Score: Low to High</option>
+          <option value="date_desc">Newest First</option>
+          <option value="date_asc">Oldest First</option>
+        </select>
+        <label class="filter-chip"><input type="checkbox" id="fEmail"> Has Email</label>
+        <label class="filter-chip"><input type="checkbox" id="fPhone"> Has Phone</label>
+      </div>
+
+      <!-- Table -->
+      <section class="surface table-surface">
+        <div class="table-scroll">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th class="col-cb"><input type="checkbox" id="selAll" onchange="toggleSelectAll(this.checked)"></th>
+                <th class="col-dot"></th>
+                <th class="col-name">Company</th>
+                <th class="col-score">Score</th>
+                <th class="col-source">Source</th>
+                <th class="col-city">City</th>
+                <th class="col-status">Status</th>
+                <th class="col-pain">Pain Signal</th>
+                <th class="col-time">Added</th>
+              </tr>
+            </thead>
+            <tbody id="leadTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-bar">
+          <span id="leadCount">0 leads</span>
+          <div class="pag-btns">
+            <button class="pagination-btn" id="prevBtn" onclick="prevPage()" disabled>Prev</button>
+            <span id="pageInfo" style="font-size:0.8rem;color:var(--text-muted);padding:0 4px">1/1</span>
+            <button class="pagination-btn" id="nextBtn" onclick="nextPage()" disabled>Next</button>
+          </div>
+        </div>
+
+        <!-- Bulk bar -->
+        <div class="bulk-bar" id="bulkBar">
+          <span class="bulk-label" id="bulkCount">0 selected</span>
+          <button class="bulk-btn" onclick="bulkAction('Contacted')">Mark Contacted</button>
+          <button class="bulk-btn danger" onclick="bulkAction('Dead')">Mark Dead</button>
+          <button class="bulk-btn success" onclick="bulkReview('approved')">Approve All</button>
+          <button class="bulk-btn danger" onclick="bulkReview('rejected')">Reject All</button>
+          <button class="bulk-btn" onclick="exportCSV()">Export CSV</button>
+          <button class="bulk-btn" onclick="clearSelection()">Clear</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Detail panel -->
+  <aside class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <h3 id="detailTitle">Lead Details</h3>
+      <button class="detail-close" onclick="closeDetail()">x</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </aside>
+
+  <!-- Toasts -->
+  <div class="toast-container" id="toasts"></div>
+
+  <script src="./shared.js"></script>
+  <script src="./leads_app.js"></script>
+</body>
+</html>

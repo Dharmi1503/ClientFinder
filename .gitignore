@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+
+venv/
+node_modules/
+dist/
+
+*.db
+*.db-shm
+*.db-wal
+
+.env
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+
+.agents/
+scratch/

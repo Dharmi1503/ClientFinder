@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClientFinder | Operations</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="ops">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <p class="kicker">Broader AI</p>
+        <h1>ClientFinder</h1>
+        <p class="sidebar-copy">See pipeline health, source quality, and review queue in one separate operations view.</p>
+      </div>
+
+      <nav class="nav-links">
+        <a href="./index.html" class="nav-link">Run Search</a>
+        <a href="./leads.html" class="nav-link">Saved Leads</a>
+        <a href="./ops.html" class="nav-link active">Operations</a>
+      </nav>
+
+      <div class="sidebar-card">
+        <label for="apiBase" class="field-label">Backend URL</label>
+        <div class="backend-inline">
+          <input id="apiBase" type="text" value="http://127.0.0.1:7000" aria-label="API base URL">
+          <button id="healthBtn" class="ghost-btn" type="button">Check</button>
+        </div>
+        <p id="healthStatus" class="helper-text">Waiting for backend check.</p>
+      </div>
+    </aside>
+
+    <main class="main-shell">
+      <section class="hero-surface">
+        <div>
+          <p class="kicker">Operations</p>
+          <h2>System Overview</h2>
+          <p class="section-copy">Use this page for backend health, source quality, and items waiting for review.</p>
+        </div>
+        <button id="refreshOpsBtn" class="primary-btn" type="button">Refresh Data</button>
+      </section>
+
+      <section class="ops-grid">
+        <article class="surface">
+          <div class="section-head">
+            <div>
+              <p class="kicker">Scrapers</p>
+              <h3>Scraper Health</h3>
+            </div>
+          </div>
+          <div id="scraperHealth" class="stack-grid empty-box">No scraper health loaded yet.</div>
+        </article>
+
+        <article class="surface">
+          <div class="section-head">
+            <div>
+              <p class="kicker">Quality</p>
+              <h3>Source Quality</h3>
+            </div>
+          </div>
+          <div id="sourceQuality" class="stack-grid empty-box">No source quality loaded yet.</div>
+        </article>
+
+        <article class="surface surface-wide">
+          <div class="section-head">
+            <div>
+              <p class="kicker">Review</p>
+              <h3>Pending Review Queue</h3>
+            </div>
+          </div>
+          <div id="reviewQueue" class="stack-grid empty-box">No review queue loaded yet.</div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="./shared.js"></script>
+  <script src="./ops.js"></script>
+</body>
+</html>

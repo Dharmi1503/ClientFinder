@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClientFinder | Run Search</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="home">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <p class="kicker">Broader AI</p>
+        <h1>ClientFinder</h1>
+        <p class="sidebar-copy">Find clients, review results, and keep your lead flow organized without a cluttered dashboard.</p>
+      </div>
+
+      <nav class="nav-links">
+        <a href="./index.html" class="nav-link active">Run Search</a>
+        <a href="./leads.html" class="nav-link">Saved Leads</a>
+        <a href="./ops.html" class="nav-link">Operations</a>
+      </nav>
+
+      <div class="sidebar-card">
+        <label for="apiBase" class="field-label">Backend URL</label>
+        <div class="backend-inline">
+          <input id="apiBase" type="text" value="http://127.0.0.1:7000" aria-label="API base URL">
+          <button id="healthBtn" class="ghost-btn" type="button">Check</button>
+        </div>
+        <p id="healthStatus" class="helper-text">Waiting for backend check.</p>
+      </div>
+    </aside>
+
+    <main class="main-shell">
+      <section class="hero-surface">
+        <div>
+          <p class="kicker">Pipeline</p>
+          <h2>Run a Fresh Search</h2>
+          <p class="section-copy">Start the lead-generation flow here. This page only handles search and result review.</p>
+        </div>
+        <span id="jobBadge" class="badge idle">Idle</span>
+      </section>
+
+      <section class="surface">
+        <form id="pipelineForm" class="search-grid">
+          <label>
+            <span class="field-label">Service</span>
+            <select name="service" required>
+              <option value="AI automation">AI automation</option>
+              <option value="Website development" selected>Website development</option>
+              <option value="Web development">Web development</option>
+              <option value="App development">App development</option>
+              <option value="Machine learning solutions">Machine learning solutions</option>
+              <option value="Digital marketing">Digital marketing</option>
+            </select>
+          </label>
+
+          <label>
+            <span class="field-label">Industry</span>
+            <select name="industry" required>
+              <option value="web development">web development</option>
+              <option value="ai automation">ai automation</option>
+              <option value="machine learning">machine learning</option>
+              <option value="app development">app development</option>
+              <option value="hospitals" selected>hospitals</option>
+              <option value="restaurants">restaurants</option>
+              <option value="real estate">real estate</option>
+              <option value="clinics">clinics</option>
+              <option value="salons">salons</option>
+              <option value="gyms">gyms</option>
+              <option value="schools">schools</option>
+              <option value="hotels">hotels</option>
+            </select>
+          </label>
+
+          <label>
+            <span class="field-label">Location</span>
+            <select name="location" required>
+              <option value="Delhi" selected>Delhi</option>
+              <option value="Mumbai">Mumbai</option>
+              <option value="Bangalore">Bangalore</option>
+              <option value="Hyderabad">Hyderabad</option>
+              <option value="Chennai">Chennai</option>
+              <option value="Kolkata">Kolkata</option>
+              <option value="Pune">Pune</option>
+              <option value="Ahmedabad">Ahmedabad</option>
+              <option value="Jaipur">Jaipur</option>
+              <option value="Surat">Surat</option>
+              <option value="Lucknow">Lucknow</option>
+            </select>
+          </label>
+
+          <label>
+            <span class="field-label">Budget Range</span>
+            <input name="budget_range" type="text" value="INR 50k-2L">
+          </label>
+
+          <label>
+            <span class="field-label">Max Leads</span>
+            <input name="max_leads" type="number" min="1" max="100" value="10">
+          </label>
+
+          <label class="toggle-card">
+            <span class="field-label">Fast Mode</span>
+            <input name="fast_mode" type="checkbox" checked>
+          </label>
+
+          <div class="search-actions">
+            <button id="runBtn" class="primary-btn" type="submit">Run Search</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="surface status-surface">
+        <div class="status-topline">
+          <div>
+            <p class="kicker">Live Status</p>
+            <h3 id="jobMessage">No job started yet.</h3>
+            <p id="jobStage" class="helper-text">Stage: idle</p>
+          </div>
+        </div>
+        <div class="progress-rail">
+          <div id="progressBar" class="progress-fill"></div>
+        </div>
+      </section>
+
+      <section class="surface">
+        <div class="section-head">
+          <div>
+            <p class="kicker">Directory Results</p>
+            <h3>Business Listings Output</h3>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <button type="button" class="metric-card metric-button" id="openAllLeads">
+            <span>Total Saved</span>
+            <strong id="sumSaved">0</strong>
+          </button>
+          <button type="button" class="metric-card metric-button" id="openHotLeads">
+            <span>HOT</span>
+            <strong id="sumHot">0</strong>
+          </button>
+          <button type="button" class="metric-card metric-button" id="openWarmLeads">
+            <span>WARM</span>
+            <strong id="sumWarm">0</strong>
+          </button>
+          <button type="button" class="metric-card metric-button" id="openColdLeads">
+            <span>COLD</span>
+            <strong id="sumCold">0</strong>
+          </button>
+        </div>
+
+        <div id="freshLeads" class="result-grid empty-box">
+          Run a search to see directory leads here.
+        </div>
+      </section>
+
+      <section class="surface">
+        <div class="section-head">
+          <div>
+            <p class="kicker">Intent Results</p>
+            <h3>Freelancer + Reddit Pipeline</h3>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="metric-card">
+            <span>Intent HOT</span>
+            <strong id="intentHot">0</strong>
+          </div>
+          <div class="metric-card">
+            <span>Intent WARM</span>
+            <strong id="intentWarm">0</strong>
+          </div>
+          <div class="metric-card">
+            <span>Intent COLD</span>
+            <strong id="intentCold">0</strong>
+          </div>
+          <div class="metric-card">
+            <span>Intent Saved</span>
+            <strong id="intentSaved">0</strong>
+          </div>
+        </div>
+
+        <div id="intentLeads" class="result-grid empty-box">
+          Run a search to see Freelancer and Reddit leads here.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./shared.js"></script>
+  <script src="./home.js"></script>
+</body>
+</html>
