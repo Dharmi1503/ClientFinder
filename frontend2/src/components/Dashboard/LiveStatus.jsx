@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, CheckCircle, Circle } from 'lucide-react'
+import { Activity, CheckCircle, Circle, Terminal } from 'lucide-react'
 import { apiService } from '../../services/api'
 
 const STAGE_LABELS = [
@@ -9,10 +9,9 @@ const STAGE_LABELS = [
   'Qualifying',
   'Enriching',
   'AI Scoring',
-  'Saving Results',
+  'Saving',
 ]
 
-// Map backend stage strings → index
 const stageIndex = (stageStr = '') => {
   const s = stageStr.toLowerCase()
   if (s.includes('scrap')) return 1
@@ -23,20 +22,18 @@ const stageIndex = (stageStr = '') => {
   return 0
 }
 
-// jobId passed from Dashboard when RunSearch fires
-export default function LiveStatus({ jobId }) {
+export default function LiveStatus({ jobId, onDone }) {
   const [currentStage, setCurrentStage] = useState(-1)
-  const [logs, setLogs] = useState(['System ready. Waiting for search...'])
+  const [logs, setLogs] = useState(['System idle. Waiting for search...'])
   const [isRunning, setIsRunning] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const intervalRef = useRef(null)
 
-  const addLog = (msg) => setLogs(prev => [msg, ...prev].slice(0, 12))
+  const addLog = (msg) => setLogs(prev => [msg, ...prev].slice(0, 8))
 
   useEffect(() => {
     if (!jobId) return
 
-    // New job started — reset
     setCurrentStage(0)
     setIsRunning(true)
     setIsDone(false)
@@ -49,25 +46,24 @@ export default function LiveStatus({ jobId }) {
         const job = await apiService.getJob(jobId)
         const idx = stageIndex(job.stage)
         setCurrentStage(idx)
-        addLog(`[${job.stage || 'running'}] ${job.message || ''}`)
+        if (job.message) {
+            addLog(`[${job.stage || 'running'}] ${job.message}`)
+        }
 
         if (job.status === 'done') {
           clearInterval(intervalRef.current)
           setCurrentStage(5)
           setIsRunning(false)
           setIsDone(true)
-          const total = job.result?.total_leads ?? 0
-          const hot = job.result?.hot_leads?.length ?? 0
-          addLog(`✅ Done! ${total} leads found. ${hot} HOT.`)
+          if (onDone) onDone()
+          addLog(`✅ Done! Pipeline execution completed successfully.`)
         } else if (job.status === 'error') {
           clearInterval(intervalRef.current)
           setIsRunning(false)
           addLog(`❌ Pipeline failed: ${job.error || 'Unknown error'}`)
         }
       } catch (err) {
-        clearInterval(intervalRef.current)
-        setIsRunning(false)
-        addLog('⚠️ Lost connection to backend.')
+        // keep polling unless it's a hard error
       }
     }, 2000)
 
@@ -77,87 +73,100 @@ export default function LiveStatus({ jobId }) {
   const progress = currentStage < 0 ? 0 : Math.round((currentStage / (STAGE_LABELS.length - 1)) * 100)
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden h-full">
-      <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold flex items-center gap-2">
-              <Activity className={`w-5 h-5 ${isRunning ? 'text-indigo-500 animate-pulse' : 'text-gray-400'}`} />
-              Live Status
-            </h3>
-            <p className="text-xs text-gray-500 mt-1">Real-time pipeline execution</p>
+    <div className="glass rounded-[2rem] border border-white/20 dark:border-white/5 overflow-hidden shadow-2xl">
+      <div className="p-6 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between bg-white/30 dark:bg-gray-900/30">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-xl ${isRunning ? 'bg-indigo-500/10 text-indigo-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+            <Activity className={`w-5 h-5 ${isRunning ? 'animate-pulse' : ''}`} />
           </div>
-          {isDone && (
-            <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg font-medium">
-              Complete
-            </span>
-          )}
+          <div>
+            <h3 className="font-bold text-gray-900 dark:text-white">Live Execution Pipeline</h3>
+            <p className="text-xs text-gray-500">Tracking search progress in real-time</p>
+          </div>
         </div>
+        <AnimatePresence>
+          {isDone && (
+            <motion.span 
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="px-3 py-1 text-xs bg-emerald-500 text-white rounded-full font-black uppercase tracking-wider shadow-lg shadow-emerald-500/20"
+            >
+              Complete
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="p-6 space-y-6">
-        {/* Progress bar */}
-        <div>
-          <div className="flex justify-between text-sm mb-2">
-            <span className="font-medium">
-              {currentStage < 0 ? 'Idle' : STAGE_LABELS[currentStage] || 'Complete'}
-            </span>
-            <span className="text-gray-500">{progress}%</span>
-          </div>
-          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.5 }}
-            />
-          </div>
-        </div>
-
-        {/* Stage timeline */}
-        <div className="space-y-3">
-          {STAGE_LABELS.map((label, idx) => {
-            const done = idx < currentStage
-            const active = idx === currentStage && isRunning
-            const pending = idx > currentStage
-            return (
-              <div key={label} className="flex items-center gap-3">
-                <div className="relative">
-                  {done ? (
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  ) : active ? (
-                    <CheckCircle className="w-5 h-5 text-indigo-500 animate-pulse" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-gray-300 dark:text-gray-600" />
-                  )}
-                  {idx < STAGE_LABELS.length - 1 && (
-                    <div className={`absolute top-5 left-2.5 w-0.5 h-5 -translate-x-1/2 ${done ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                  )}
+      <div className="p-8">
+        {/* Horizontal Steps */}
+        <div className="relative mb-12">
+          <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 dark:bg-gray-800 -translate-y-1/2 z-0" />
+          <motion.div 
+            className="absolute top-1/2 left-0 h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 -translate-y-1/2 z-0"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 1, ease: "circOut" }}
+          />
+          
+          <div className="relative z-10 flex justify-between">
+            {STAGE_LABELS.map((label, idx) => {
+              const done = idx < currentStage
+              const active = idx === currentStage && isRunning
+              return (
+                <div key={label} className="flex flex-col items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-xl ${
+                    done ? 'bg-emerald-500 text-white' : 
+                    active ? 'bg-indigo-500 text-white scale-110 shadow-indigo-500/30' : 
+                    'bg-white dark:bg-gray-900 text-gray-300 dark:text-gray-600 border border-gray-200 dark:border-gray-800'
+                  }`}>
+                    {done ? <CheckCircle className="w-5 h-5" /> : <span className="text-sm font-bold">{idx + 1}</span>}
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${
+                    done || active ? 'text-gray-900 dark:text-white' : 'text-gray-400'
+                  }`}>
+                    {label}
+                  </span>
                 </div>
-                <span className={`text-sm ${done || active ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-400'}`}>
-                  {label}
-                </span>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
 
-        {/* Terminal logs */}
-        <div>
-          <p className="text-xs font-mono text-gray-500 mb-2">Execution Logs</p>
-          <div className="bg-gray-900 rounded-xl p-3 font-mono text-xs space-y-1 h-32 overflow-y-auto">
-            <AnimatePresence>
-              {logs.map((log, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="text-gray-300"
-                >
-                  {log}
-                </motion.div>
-              ))}
-            </AnimatePresence>
+        {/* Horizontal Split for Stats and Logs */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="p-5 rounded-[1.5rem] bg-indigo-500/5 border border-indigo-500/10 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Current Task</p>
+              <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                {currentStage < 0 ? 'Awaiting Job' : STAGE_LABELS[currentStage] || 'Execution Finished'}
+              </h4>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">Completion</p>
+              <h4 className="text-2xl font-black text-indigo-500">{progress}%</h4>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[10px] font-mono text-gray-500">
+              <Terminal className="w-3 h-3" />
+              LIVE_LOGS
+            </div>
+            <div className="bg-gray-950 rounded-[1.5rem] p-5 font-mono text-[11px] leading-relaxed h-[100px] overflow-y-auto custom-scrollbar border border-white/5 shadow-inner">
+              <AnimatePresence>
+                {logs.map((log, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`${idx === 0 ? 'text-indigo-400' : 'text-gray-500'}`}
+                  >
+                    <span className="opacity-30 mr-2">{'>'}</span>
+                    {log}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>

@@ -34,7 +34,7 @@ function StatCard({ def, value, idx }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: idx * 0.1 }}
       whileHover={{ y: -4 }}
-      className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-lg hover:shadow-xl transition-all duration-300"
+      className="relative overflow-hidden rounded-2xl glass shadow-lg hover:shadow-xl transition-all duration-300"
       style={{ boxShadow: `0 20px 25px -5px ${def.color}20` }}
     >
       <div className="p-6">
@@ -54,34 +54,27 @@ function StatCard({ def, value, idx }) {
 
 export default function StatsCards({ refreshTrigger }) {
   const [counts, setCounts] = useState({ HOT: 0, WARM: 0, COLD: 0, review: 0 })
+  const [loading, setLoading] = useState(true)
 
   const fetchCounts = async () => {
     try {
-      const [leadResponse, reviewQueue] = await Promise.all([
-        apiService.getLeads({ page: 1, page_size: 100 }),
+      // Fetch all leads with minimal page size just to get totals
+      const [hot, warm, cold, reviewQueue] = await Promise.all([
+        apiService.getLeads({ label: 'HOT',  page: 1, page_size: 1 }),
+        apiService.getLeads({ label: 'WARM', page: 1, page_size: 1 }),
+        apiService.getLeads({ label: 'COLD', page: 1, page_size: 1 }),
         apiService.getReviewQueue(),
       ])
-
-      const leads = leadResponse.results || []
-      const nextCounts = leads.reduce(
-        (acc, lead) => {
-          const label = String(lead.label || '').toUpperCase()
-          if (label === 'HOT' || label === 'WARM' || label === 'COLD') {
-            acc[label] += 1
-          }
-          return acc
-        },
-        { HOT: 0, WARM: 0, COLD: 0 }
-      )
-
       setCounts({
-        HOT: nextCounts.HOT,
-        WARM: nextCounts.WARM,
-        COLD: nextCounts.COLD,
-        review: reviewQueue.count ?? reviewQueue.leads?.length ?? 0,
+        HOT:    hot.total    ?? hot.results?.length    ?? 0,
+        WARM:   warm.total   ?? warm.results?.length   ?? 0,
+        COLD:   cold.total   ?? cold.results?.length   ?? 0,
+        review: reviewQueue.total ?? (Array.isArray(reviewQueue) ? reviewQueue.length : reviewQueue.results?.length) ?? 0,
       })
     } catch (err) {
       console.error('StatsCards fetch failed:', err)
+    } finally {
+      setLoading(false)
     }
   }
 

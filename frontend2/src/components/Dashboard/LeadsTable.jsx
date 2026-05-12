@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Download, ChevronLeft, ChevronRight, Eye, Search, Loader2 } from 'lucide-react'
+import { Download, ChevronLeft, ChevronRight, Eye, Search, Loader2, Sparkles } from 'lucide-react'
 import { apiService } from '../../services/api'
+import LeadDetailsModal from './LeadDetailsModal'
 
 const STATUS_OPTIONS = ['New', 'Contacted', 'Replied', 'Meeting', 'Closed', 'Dead']
 const PAGE_SIZE = 10
@@ -13,6 +14,7 @@ export default function LeadsTable({ refreshTrigger }) {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState(null)
+  const [selectedLead, setSelectedLead] = useState(null)
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -117,28 +119,44 @@ export default function LeadsTable({ refreshTrigger }) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   whileHover={{ backgroundColor: 'rgba(99,102,241,0.04)' }}
-                  className="transition-colors"
+                  onClick={() => setSelectedLead(lead)}
+                  className="transition-colors cursor-pointer"
                 >
                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                    {lead.company_name}
+                    <div className="flex flex-col">
+                      <span>{lead.company_name}</span>
+                      {lead.rating && (
+                        <span className="text-[10px] text-amber-500 flex items-center gap-0.5">
+                          ⭐ {lead.rating} ({lead.review_count || 0} reviews)
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-lg text-sm font-medium ${
-                      lead.composite_score >= 70 ? 'bg-green-100 text-green-700' :
-                      lead.composite_score >= 40 ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {lead.composite_score ?? '—'}
-                    </span>
+                    <div className="group relative cursor-help">
+                      <span className={`px-2 py-1 rounded-lg text-sm font-medium ${
+                        lead.composite_score >= 72 ? 'bg-red-100 text-red-700' :
+                        lead.composite_score >= 48 ? 'bg-amber-100 text-amber-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {Math.round(lead.composite_score) ?? '—'}
+                      </span>
+                      {/* Breakdown Tooltip */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                        <div className="flex justify-between"><span>Fit:</span> <span>{lead.fit_score}</span></div>
+                        <div className="flex justify-between"><span>Intent:</span> <span>{lead.intent_score}</span></div>
+                        <div className="flex justify-between"><span>Contact:</span> <span>{lead.contact_score}</span></div>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm">{lead.source}</td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm capitalize">{lead.source}</td>
                   <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm">{lead.city}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-lg text-xs font-medium ${getLabelColor(lead.label)}`}>
                       {lead.label || 'COLD'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm max-w-[160px] truncate">
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm max-w-[160px] truncate" title={lead.pain_point}>
                     {lead.pain_point || '—'}
                   </td>
                   <td className="px-6 py-4">
@@ -152,15 +170,25 @@ export default function LeadsTable({ refreshTrigger }) {
                     </select>
                   </td>
                   <td className="px-6 py-4">
-                    <a
-                      href={lead.website || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors inline-block"
-                      title={lead.website || 'No website'}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedLead(lead); }}
+                        className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 transition-colors"
+                        title="View AI Strategy"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                      </button>
+                      <a
+                        href={lead.website || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors inline-block"
+                        title={lead.website || 'No website'}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </a>
+                    </div>
                   </td>
                 </motion.tr>
               ))}
@@ -205,6 +233,11 @@ export default function LeadsTable({ refreshTrigger }) {
           </div>
         </div>
       )}
+
+      <LeadDetailsModal 
+        lead={selectedLead} 
+        onClose={() => setSelectedLead(null)} 
+      />
     </motion.div>
   )
 }

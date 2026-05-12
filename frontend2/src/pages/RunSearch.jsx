@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Search, Zap, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Search, Zap, Loader2, CheckCircle2, ArrowRight, Star } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { apiService } from '../services/api'
+import LiveStatus from '../components/Dashboard/LiveStatus'
 
 const services = [
   'AI Automation',
@@ -52,68 +54,54 @@ const locations = [
   'Goa',
 ]
 
+
+
 // onJobStart(jobId) — parent passes this to wire LiveStatus
 export default function RunSearch({ onJobStart }) {
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState(null)
+  const [currentJobId, setCurrentJobId] = useState(null)
   const [error, setError] = useState(null)
   const [formData, setFormData] = useState({
     service: 'Website Development',
     industry: 'Hospitals',
-    location: 'Delhi NCR',
+    location: 'Mumbai',
     budget_range: '',
     max_leads: 20,
     fast_mode: true,
   })
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    setStatus('Starting pipeline...')
+    setCurrentJobId(null)
+    setShowSuccessModal(false)
 
     try {
       const result = await apiService.runPipeline(formData)
       const jobId = result.job_id
-      setStatus(`Job started: ${jobId}`)
-
-      // Tell parent (Dashboard) about the job so LiveStatus can poll it
+      setCurrentJobId(jobId)
+      
       if (onJobStart) onJobStart(jobId)
-
-      // Also poll here to update local status text
-      const interval = setInterval(async () => {
-        try {
-          const job = await apiService.getJob(jobId)
-          setStatus(`${job.stage || 'Running'}: ${job.message || ''}`)
-
-          if (job.status === 'done' || job.status === 'error') {
-            clearInterval(interval)
-            setLoading(false)
-            if (job.status === 'done') {
-              setStatus(`✅ Done! Found ${job.result?.total_leads || 0} leads.`)
-            } else {
-              setError(`Pipeline failed: ${job.error || 'Unknown error'}`)
-              setStatus(null)
-            }
-          }
-        } catch (err) {
-          clearInterval(interval)
-          setLoading(false)
-          setError('Polling failed. Check backend.')
-        }
-      }, 2000)
     } catch (err) {
       setLoading(false)
       setError(err.error || err.message || 'Failed to start pipeline')
-      setStatus(null)
     }
   }
 
+  const handleJobDone = () => {
+    setLoading(false)
+    setShowSuccessModal(true)
+  }
+
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden"
+      className="glass rounded-2xl overflow-hidden"
     >
       <div className="p-6 border-b border-gray-200 dark:border-gray-800">
         <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -193,11 +181,6 @@ export default function RunSearch({ onJobStart }) {
           </div>
         </div>
 
-        {status && (
-          <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-sm text-gray-600 dark:text-gray-400">
-            {status}
-          </div>
-        )}
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl text-sm text-red-600 dark:text-red-400">
             {error}
@@ -210,12 +193,103 @@ export default function RunSearch({ onJobStart }) {
           className="w-full py-3 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
-            <><Loader2 className="w-5 h-5 animate-spin" /> Searching for leads...</>
+            <><Loader2 className="w-5 h-5 animate-spin" /> Pipeline Running...</>
           ) : (
             <><Zap className="w-5 h-5" /> Run AI Search</>
           )}
         </button>
       </form>
+
+      {/* Live Pipeline Visualization */}
+      <AnimatePresence>
+        {currentJobId && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-6 pt-0 border-t border-gray-200 dark:border-gray-800"
+          >
+            <div className="mt-6">
+                <LiveStatus jobId={currentJobId} onDone={handleJobDone} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
+    
+    <AnimatePresence>
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setShowSuccessModal(false)}
+            className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[3rem] p-10 text-center shadow-2xl border border-white/10 overflow-hidden"
+          >
+            {/* Animated background stars/particles */}
+            <div className="absolute inset-0 pointer-events-none">
+              {[...Array(8)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ 
+                    y: [0, -200], 
+                    opacity: [0, 1, 0],
+                    scale: [0, 1.2, 0.5]
+                  }}
+                  transition={{ 
+                    duration: 3, 
+                    repeat: Infinity, 
+                    delay: i * 0.5,
+                    ease: "easeOut" 
+                  }}
+                  className="absolute text-indigo-400/20"
+                  style={{ 
+                    left: `${Math.random() * 100}%`, 
+                    top: '90%' 
+                  }}
+                >
+                  <Star className="w-4 h-4 fill-current" />
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="relative z-10">
+              <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-emerald-500/40 rotate-12">
+                <CheckCircle2 className="w-12 h-12 text-white" />
+              </div>
+              
+              <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-4">Search Complete!</h2>
+              <p className="text-lg text-slate-500 dark:text-slate-400 mb-10 leading-relaxed">
+                We've identified high-quality leads matching your criteria. Your dashboard is now updated.
+              </p>
+
+              <div className="flex flex-col gap-4">
+                <Link 
+                  to="/" 
+                  className="w-full py-5 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:scale-105 transition-all flex items-center justify-center gap-2 group"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+                <button 
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full py-4 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white font-bold transition-colors"
+                >
+                  Run Another Search
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }

@@ -1,1 +1,0 @@
-# app/filters package
