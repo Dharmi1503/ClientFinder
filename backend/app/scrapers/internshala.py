@@ -65,6 +65,13 @@ CITY_ALIASES: dict[str, list[str]] = {
     "jaipur":     ["jaipur", "pink city"],
 }
 
+_BLOCKED_JOB_TITLE = re.compile(
+    r"(?i)\b(salary|hiring|job|internship|fresher|stipend)\b"
+)
+_REQUEST_STYLE_TITLE = re.compile(
+    r"(?i)\b(looking for|need|require|wanted|project|freelance)\b"
+)
+
 
 def _city_match(text: str, city: str) -> bool:
     """GAP 5+6: city OR any alias must appear in text."""
@@ -131,6 +138,15 @@ def _clean_company_name(raw: str) -> str:
         '', raw, flags=re.IGNORECASE
     ).strip()
     return re.sub(r'[,.\-|]+$', '', cleaned).strip()
+
+
+def _is_request_style_title(title: str) -> bool:
+    title = (title or "").strip()
+    if not title:
+        return False
+    if _BLOCKED_JOB_TITLE.search(title):
+        return False
+    return bool(_REQUEST_STYLE_TITLE.search(title))
 
 
 # ── Lead builder (GAP 10: date computed here) ─────────────────────────────────
@@ -247,6 +263,8 @@ def _parse_cards(soup: "BeautifulSoup", query: str, city: str) -> list[dict]:
                 or card.find("h3") or card.find("h4")
             )
             role = role_tag.get_text(strip=True) if role_tag else query
+            if not _is_request_style_title(role):
+                continue
 
             # Location
             loc_tag = card.find(class_=re.compile(r"location|city", re.I))
@@ -422,6 +440,8 @@ async def _scrape_ddg(query: str, city: str) -> list[dict]:
         role_m = re.search(r'^(.*?)\s+(?:at|job|internship)', title, re.IGNORECASE)
         if role_m:
             role = role_m.group(1).strip()[:80] or query
+        if not _is_request_style_title(title) and not _is_request_style_title(role):
+            continue
 
         if not company or len(company) < 3:
             found = re.findall(r'([A-Z][a-zA-Z0-9 &]{2,35})', body)

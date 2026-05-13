@@ -406,6 +406,7 @@ async def get_leads(
     category: Optional[str] = Query(
         None, description="Filter by business category/type, case-insensitive"
     ),
+    label: Optional[str] = Query(None, description="Filter by lead label: HOT | WARM | COLD"),
     min_score: int = Query(0, ge=0, le=100, description="Minimum composite score"),
     max_score: int = Query(100, ge=0, le=100, description="Maximum composite score"),
     review_status: Optional[str] = Query(
@@ -416,6 +417,7 @@ async def get_leads(
     ),
     has_email: bool = Query(False, description="Only return leads that have an email"),
     has_phone: bool = Query(False, description="Only return leads that have a phone"),
+    sort_by: str = Query("recent", description="recent | score | oldest"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Results per page"),
 ):
@@ -433,12 +435,14 @@ async def get_leads(
     total, leads = get_all_leads(
         city=city,
         category=category,
+        label=label,
         min_score=min_score,
         max_score=max_score,
         review_status=review_status,
         source=source,
         has_email=has_email,
         has_phone=has_phone,
+        sort_by=sort_by,
         page=page,
         page_size=page_size,
     )

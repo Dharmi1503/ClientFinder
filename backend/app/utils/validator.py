@@ -350,7 +350,9 @@ def filter_valid_leads(
         else:
             removed += 1
             name = lead.get("company_name", "?")
-            print(f"[validator] removed '{name}': {reason}")
+            safe_name = str(name).encode("cp1252", errors="replace").decode("cp1252")
+            safe_reason = str(reason).encode("cp1252", errors="replace").decode("cp1252")
+            print(f"[validator] removed '{safe_name}': {safe_reason}")
 
     if removed:
         print(f"[validator] kept {len(valid)}, removed {removed} invalid leads")

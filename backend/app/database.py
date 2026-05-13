@@ -564,12 +564,14 @@ def save_lead(lead: dict) -> int:
 def get_all_leads(
     city: str | None = None,
     category: str | None = None,
+    label: str | None = None,
     min_score: int = 0,
     max_score: int = 100,
     review_status: str | None = None,
     source: str | None = None,
     has_email: bool = False,
     has_phone: bool = False,
+    sort_by: str = "recent",
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[int, list[dict]]:
@@ -590,6 +592,10 @@ def get_all_leads(
         conditions.append("LOWER(industry) LIKE ?")
         values.append(f"%{category.strip().lower()}%")
 
+    if label:
+        conditions.append("UPPER(label) = ?")
+        values.append(label.strip().upper())
+
     if review_status:
         conditions.append("LOWER(review_status) = ?")
         values.append(review_status.strip().lower())
@@ -607,11 +613,19 @@ def get_all_leads(
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     offset = (page - 1) * page_size
 
+    sort_mode = (sort_by or "recent").strip().lower()
+    if sort_mode == "score":
+        order_by = "ORDER BY composite_score DESC, created_at DESC"
+    elif sort_mode == "oldest":
+        order_by = "ORDER BY created_at ASC, id ASC"
+    else:
+        order_by = "ORDER BY created_at DESC, composite_score DESC"
+
     count_sql = f"SELECT COUNT(*) AS total FROM leads {where}"
     data_sql = f"""
         SELECT * FROM leads
         {where}
-        ORDER BY composite_score DESC, created_at DESC
+        {order_by}
         LIMIT ? OFFSET ?
     """
 

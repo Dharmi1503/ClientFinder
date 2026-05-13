@@ -17,9 +17,12 @@ The deterministic compute_priority_tag() still overrides the
 label for consistency (LLMs hallucinate scores).
 """
 
+import asyncio
 import json
 import os
+import re
 import time
+from datetime import date, datetime
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
@@ -29,6 +32,8 @@ groq_client = AsyncOpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
+
+_groq_daily_calls = 0
 
 
 
@@ -63,6 +68,15 @@ def _tag_from_composite(composite: float) -> str:
     if composite >= 72:
         return "HOT"
     if composite >= 48:
+        return "WARM"
+    return "COLD"
+
+
+def _tag_intent_composite(composite: float) -> str:
+    """Map 0-10 intent composite score to HOT/WARM/COLD."""
+    if composite >= 6.0:
+        return "HOT"
+    if composite >= 4.0:
         return "WARM"
     return "COLD"
 
@@ -116,6 +130,15 @@ def compute_client_readiness_score(lead: dict) -> int:
 # ---------------------------------------------------------------------------
 
 _SOURCE_SIGNALS = {
+    "freelancer": (
+        "VERY HIGH SIGNAL (ACTIVE REQUEST): Public buyer project on Freelancer. "
+        "The client is explicitly shopping for delivery now. Intent score 80-95 "
+        "unless budget or wording suggests low quality."
+    ),
+    "reddit": (
+        "HIGH SIGNAL (ACTIVE REQUEST): Public post asking for help or referrals. "
+        "Strong if business wording, urgency, or budget is visible. Intent score 65-85."
+    ),
     # ── High-quality sources (real businesses, not job hunters) ──────────
     "justdial":    (
         "MEDIUM SIGNAL: SMB found on JustDial. Likely owner-operated. These "
@@ -165,6 +188,205 @@ _SOURCE_SIGNALS = {
         "but is looking for cheap labor, not a premium vendor. Intent score 30–50."
     ),
 }
+
+_INTENT_PLATFORM_REACHABILITY = {
+    "bark": 9,
+    "worknhire": 7,
+    "freelancer": 6,
+    "internshala": 5,
+    "reddit": 3,
+}
+
+_BUDGET_RE = re.compile(r"(?i)(?:rs\.?|inr|₹|\$)\s*([\d,.]+)\s*([kKmMlL]?)")
+_URGENCY_RE = re.compile(
+    r"(?i)\b(asap|urgent|immediately|deadline|within\s+\d+\s+(?:day|days|week|weeks)|today|tomorrow)\b"
+)
+_RED_FLAG_PATTERNS = {
+    "internship post": re.compile(r"(?i)\b(?:internship|intern)\b"),
+    "student project": re.compile(r"(?i)\b(?:student project|college project|final year|portfolio project)\b"),
+    "too vague": re.compile(r"(?i)\b(?:need help|looking for help|someone who can help|project)\b"),
+}
+
+
+def _tokenize_service_text(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", (value or "").lower())
+        if len(token) > 2 and token not in {"for", "and", "the", "with", "from", "that", "this"}
+    }
+
+
+def _extract_budget_value(raw_budget: str) -> float | None:
+    matches = _BUDGET_RE.findall(raw_budget or "")
+    if not matches:
+        return None
+
+    values: list[float] = []
+    for amount_text, suffix in matches:
+        try:
+            amount = float(amount_text.replace(",", ""))
+        except ValueError:
+            continue
+        suffix = suffix.lower()
+        if suffix == "k":
+            amount *= 1_000
+        elif suffix in {"l", "m"}:
+            amount *= 100_000
+        values.append(amount)
+
+    return max(values) if values else None
+
+
+def _budget_confidence_score(raw_budget: str, service: str, request_text: str, source: str = "") -> int:
+    budget_value = _extract_budget_value(raw_budget)
+    if budget_value is None:
+        if (source or "").lower().strip() in {"bark", "worknhire"}:
+            return 5
+        return 2
+
+    score = 4
+    if budget_value >= 10_000 or budget_value >= 200:
+        score += 3
+
+    service_text = f"{service} {request_text}".lower()
+    realistic_floor = 15_000
+    if any(token in service_text for token in ("ai", "automation", "software", "app", "website", "web", "crm")):
+        realistic_floor = 10_000
+    if any(token in service_text for token in ("chatbot", "landing page", "seo", "design")):
+        realistic_floor = 8_000
+
+    if budget_value >= realistic_floor:
+        score += 3
+
+    return max(0, min(10, score))
+
+
+def _request_clarity_score(text: str) -> int:
+    lowered = (text or "").lower()
+    text_len = len(text or "")
+    if text_len > 300:
+        score = 7
+    elif text_len > 100:
+        score = 5
+    else:
+        score = 3
+    if len(lowered.split()) >= 25:
+        score += 2
+    if len(lowered.split()) >= 60:
+        score += 1
+    if re.search(r"(?i)\b(?:scope|features|requirements|deliverables|pages|screens|modules)\b", lowered):
+        score += 2
+    if re.search(r"(?i)\b(?:deadline|timeline|days|weeks|month)\b", lowered):
+        score += 2
+    if re.search(r"(?i)\b(?:budget|quote|fixed price|hourly)\b", lowered):
+        score += 1
+    return max(0, min(10, score))
+
+
+def _fit_score(service: str, request_text: str) -> int:
+    service_tokens = _tokenize_service_text(service)
+    request_tokens = _tokenize_service_text(request_text)
+    if not service_tokens or not request_tokens:
+        return 4
+
+    overlap = service_tokens & request_tokens
+    overlap_ratio = len(overlap) / max(1, min(len(service_tokens), len(request_tokens)))
+    score = 2 + round(overlap_ratio * 8)
+
+    phrase_hits = 0
+    for phrase in (
+        "ai automation", "automation", "website development", "web development",
+        "chatbot", "crm", "lead generation", "seo", "social media",
+    ):
+        if phrase in service.lower() and phrase in request_text.lower():
+            phrase_hits += 1
+    score += min(2, phrase_hits)
+    return max(0, min(10, score))
+
+
+def _freshness_score(posted_date_value) -> int:
+    if not posted_date_value:
+        return 5
+
+    if isinstance(posted_date_value, datetime):
+        posted = posted_date_value.date()
+    elif isinstance(posted_date_value, date):
+        posted = posted_date_value
+    else:
+        text = str(posted_date_value).strip()
+        lowered = text.lower()
+        if "today" in lowered:
+            return 10
+        if "yesterday" in lowered:
+            return 8
+        rel_match = re.search(r"(\d+)\s*(hour|hours|hr|hrs|day|days|week|weeks)", lowered)
+        if rel_match:
+            qty = int(rel_match.group(1))
+            unit = rel_match.group(2)
+            if "hour" in unit:
+                return 10
+            if qty == 1:
+                return 8
+            if qty <= 3:
+                return 6
+            if qty <= 7:
+                return 3
+            return 1
+        posted = None
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+            try:
+                posted = datetime.strptime(text[:10], fmt).date()
+                break
+            except ValueError:
+                continue
+        if posted is None:
+            return 5
+
+    age_days = max(0, (date.today() - posted).days)
+    if age_days == 0:
+        return 10
+    if age_days == 1:
+        return 8
+    if age_days <= 3:
+        return 6
+    if age_days <= 7:
+        return 3
+    return 1
+
+
+def _detect_urgency_signal(text: str) -> str:
+    match = _URGENCY_RE.search(text or "")
+    if not match:
+        return "no"
+    return f'yes: "{match.group(0)}"'
+
+
+def _detect_red_flags(lead: dict, clarity_score: int, budget_score: int) -> list[str]:
+    text = " ".join(
+        filter(None, [lead.get("title"), lead.get("post_title"), lead.get("description"), lead.get("budget")])
+    )
+    flags = [name for name, pattern in _RED_FLAG_PATTERNS.items() if pattern.search(text)]
+    if clarity_score <= 3 and "too vague" not in flags:
+        flags.append("too vague")
+    if budget_score <= 3:
+        flags.append("no budget stated")
+    return flags
+
+
+def _best_channel_for_source(source: str) -> str:
+    return {
+        "bark": "contact form",
+        "worknhire": "proposal",
+        "freelancer": "proposal",
+        "internshala": "apply",
+        "reddit": "DM",
+    }.get(source.lower(), "proposal")
+
+
+def _intent_pain_point(lead: dict) -> str:
+    title = lead.get("title") or lead.get("post_title") or "request"
+    location = lead.get("city") or lead.get("location") or "their market"
+    return f"The poster needs help solving '{title}' for their business in {location}."
 
 
 
@@ -425,6 +647,29 @@ Defaulting everything to WARM because you are uncertain is WRONG.
         analysis["label"]           = tag2
         analysis["composite_score"] = composite2
 
+    if lead.get("source_intent_level") == "active_request":
+        explicit_signal = (
+            lead.get("intent_signal")
+            or lead.get("post_title")
+            or lead.get("description")
+            or ""
+        ).lower()
+        active_bonus = 0
+        if any(token in explicit_signal for token in ("urgent", "asap", "need", "looking for", "require")):
+            active_bonus += 8
+        if lead.get("budget_hint"):
+            active_bonus += 5
+        if lead.get("qualifier_flag") == "LOW_BUDGET":
+            active_bonus -= 10
+        elif lead.get("qualifier_flag") == "WEAK_INTENT":
+            active_bonus -= 5
+
+        if active_bonus != 0:
+            boosted = max(0, min(100, int(analysis.get("composite_score", 0)) + active_bonus))
+            analysis["composite_score"] = boosted
+            analysis["priority_tag"] = _tag_from_composite(boosted)
+            analysis["label"] = analysis["priority_tag"]
+
     # Field aliases for pipeline/DB compatibility
     analysis["hot_reason"]           = analysis.get("score_reason", "")
     analysis["intent_score"]         = analysis.get("buying_intent_score", 0)
@@ -448,6 +693,159 @@ Defaulting everything to WARM because you are uncertain is WRONG.
     analysis["priority_tag"] = weighted_tag
     analysis["label"] = weighted_tag
 
+    return analysis
+
+
+async def score_intent_lead(lead: dict, context: dict) -> dict:
+    """
+    Score intent-platform request leads using a request-centric rubric.
+    These leads are job posts / service requests, not enriched directory businesses.
+    """
+    source = (lead.get("source") or "").lower().strip()
+    title = lead.get("title") or lead.get("post_title") or lead.get("company_name") or ""
+    description = lead.get("description") or ""
+    budget = lead.get("budget") or lead.get("budget_hint") or ""
+    location = lead.get("city") or lead.get("location") or ""
+    posted_date = lead.get("posted_date") or lead.get("date_posted")
+    platform_url = lead.get("platform_url") or lead.get("contact_link") or lead.get("source_url") or ""
+    request_text = " ".join(filter(None, [title, description]))
+
+    deterministic = _rule_based_intent_scoring_fallback(lead, context)
+    global _groq_daily_calls
+    if _groq_daily_calls > 80:
+        analysis = deterministic
+        analysis["score_reason"] = "Intent deterministic fallback used because Groq session call cap was reached."
+        analysis["hot_reason"] = analysis["score_reason"]
+        analysis["priority_tag"] = analysis["label"]
+        analysis["intent_score"] = analysis.get("fit_score", 0)
+        analysis["contact_score"] = analysis.get("platform_reachability_score", 0)
+        analysis["buying_intent_score"] = analysis.get("request_clarity_score", 0)
+        analysis["contactability_score"] = analysis.get("platform_reachability_score", 0)
+        analysis["platform_url"] = platform_url
+        if platform_url:
+            analysis["source_url"] = platform_url
+            analysis["contact_link"] = platform_url
+        return analysis
+
+    prompt = f"""You are an intent-lead scoring analyst for Broader AI.
+You are scoring ONE business request posted on a freelance or intent platform.
+
+Return ONLY valid JSON with these exact fields:
+{{
+  "fit_score": <integer 0-10>,
+  "request_clarity_score": <integer 0-10>,
+  "budget_confidence_score": <integer 0-10>,
+  "platform_reachability_score": <integer 0-10>,
+  "freshness_score": <integer 0-10>,
+  "composite_score": <number 0-10>,
+  "label": "<HOT/WARM/COLD>",
+  "pain_point": "<what problem the poster is trying to solve>",
+  "personalized_opener": "<tailored first line of outreach>",
+  "best_channel": "<proposal/DM/reply/contact form/apply>",
+  "urgency_signal": "<yes/no + quote if present>",
+  "red_flags": ["<flag 1>", "<flag 2>"]
+}}
+
+Score using these strict rules:
+- fit_score: request/service match
+- request_clarity_score: vague request low, detailed scope/timeline/deliverables high
+- budget_confidence_score: budget exists + above 10k INR or 200 USD + realistic for market
+- platform_reachability_score: Bark 9, WorkNHire 7, Freelancer 6, Internshala 5, Reddit 3
+- freshness_score: today 10, yesterday 8, 2-3 days 6, 4-7 days 3, older 1
+- composite_score = (fit*0.25) + (clarity*0.20) + (budget*0.25) + (reachability*0.15) + (freshness*0.15)
+- HOT if composite >= 6.5, WARM if >= 4.5, else COLD
+
+Context:
+- Our service: {context.get("service", "")}
+- Target budget range: {context.get("budget_range", "")}
+
+Lead:
+- Source: {source}
+- Title: {title}
+- Description: {description[:4000]}
+- Budget: {budget or "not stated"}
+- Location: {location or "unknown"}
+- Posted date: {posted_date or "unknown"}
+- Platform URL: {platform_url or "unknown"}
+
+Deterministic reference baseline:
+{json.dumps(deterministic, ensure_ascii=True)}
+"""
+
+    try:
+        _groq_daily_calls += 1
+        analysis = await run_llm(
+            prompt,
+            json_mode=True,
+            lead_id=lead.get("_db_id") or lead.get("id"),
+            lead=lead,
+            task="intent_scoring",
+        )
+    except Exception as exc:
+        if "429" in str(exc) or "rate limit" in str(exc).lower():
+            await asyncio.sleep(5)
+            try:
+                _groq_daily_calls += 1
+                analysis = await run_llm(
+                    prompt,
+                    json_mode=True,
+                    lead_id=lead.get("_db_id") or lead.get("id"),
+                    lead=lead,
+                    task="intent_scoring",
+                )
+            except Exception:
+                analysis = deterministic
+        else:
+            analysis = deterministic
+
+    if not analysis or not isinstance(analysis, dict):
+        analysis = deterministic
+    else:
+        try:
+            fit = max(0, min(10, int(analysis.get("fit_score", deterministic["fit_score"]))))
+            clarity = max(0, min(10, int(analysis.get("request_clarity_score", deterministic["request_clarity_score"]))))
+            budget_score = max(0, min(10, int(analysis.get("budget_confidence_score", deterministic["budget_confidence_score"]))))
+            reachability = max(0, min(10, int(analysis.get("platform_reachability_score", deterministic["platform_reachability_score"]))))
+            freshness = max(0, min(10, int(analysis.get("freshness_score", deterministic["freshness_score"]))))
+            composite = round(
+                (fit * 0.25)
+                + (clarity * 0.20)
+                + (budget_score * 0.25)
+                + (reachability * 0.15)
+                + (freshness * 0.15),
+                2,
+            )
+            analysis["fit_score"] = fit
+            analysis["request_clarity_score"] = clarity
+            analysis["budget_confidence_score"] = budget_score
+            analysis["platform_reachability_score"] = reachability
+            analysis["freshness_score"] = freshness
+            analysis["composite_score"] = composite
+            analysis["label"] = _tag_intent_composite(composite)
+        except Exception:
+            analysis = deterministic
+
+    analysis.setdefault("pain_point", deterministic["pain_point"])
+    analysis.setdefault("personalized_opener", deterministic["personalized_opener"])
+    analysis.setdefault("best_channel", deterministic["best_channel"])
+    analysis.setdefault("urgency_signal", deterministic["urgency_signal"])
+    analysis.setdefault("red_flags", deterministic["red_flags"])
+
+    analysis["priority_tag"] = analysis["label"]
+    analysis["hot_reason"] = (
+        f'{analysis["label"]}: fit {analysis.get("fit_score", 0)}/10, '
+        f'clarity {analysis.get("request_clarity_score", 0)}/10, '
+        f'budget {analysis.get("budget_confidence_score", 0)}/10.'
+    )
+    analysis["score_reason"] = analysis["hot_reason"]
+    analysis["intent_score"] = analysis.get("fit_score", 0)
+    analysis["contact_score"] = analysis.get("platform_reachability_score", 0)
+    analysis["buying_intent_score"] = analysis.get("request_clarity_score", 0)
+    analysis["contactability_score"] = analysis.get("platform_reachability_score", 0)
+    analysis["platform_url"] = platform_url
+    if platform_url:
+        analysis["source_url"] = platform_url
+        analysis["contact_link"] = platform_url
     return analysis
 
 
@@ -497,6 +895,58 @@ def _rule_based_scoring_fallback(lead: dict | None = None) -> dict:
         "estimated_deal": lead.get("budget_hint") or "",
         "speed_to_close_estimate": "Medium",
         "score_reason": "Rule-based fallback used because AI tiers were unavailable.",
+    }
+
+
+def _rule_based_intent_scoring_fallback(lead: dict | None = None, context: dict | None = None) -> dict:
+    """Deterministic fallback for intent leads using only local fields."""
+    lead = lead or {}
+    context = context or {}
+    source = (lead.get("source") or "").lower().strip()
+    title = lead.get("title") or lead.get("post_title") or lead.get("company_name") or ""
+    description = lead.get("description") or ""
+    budget = lead.get("budget") or lead.get("budget_hint") or ""
+    request_text = " ".join(filter(None, [title, description]))
+
+    fit = max(4, _fit_score(context.get("service", ""), request_text))
+    clarity = _request_clarity_score(request_text)
+    budget_score = _budget_confidence_score(
+        budget,
+        context.get("service", ""),
+        request_text,
+        source=source,
+    )
+    reachability = _INTENT_PLATFORM_REACHABILITY.get(source, 4)
+    freshness = _freshness_score(lead.get("posted_date") or lead.get("date_posted"))
+    composite = round(
+        (fit * 0.25)
+        + (clarity * 0.20)
+        + (budget_score * 0.25)
+        + (reachability * 0.15)
+        + (freshness * 0.15),
+        2,
+    )
+    label = _tag_intent_composite(composite)
+    red_flags = _detect_red_flags(lead, clarity, budget_score)
+    urgency_signal = _detect_urgency_signal(request_text)
+    best_channel = _best_channel_for_source(source)
+
+    return {
+        "fit_score": fit,
+        "request_clarity_score": clarity,
+        "budget_confidence_score": budget_score,
+        "platform_reachability_score": reachability,
+        "freshness_score": freshness,
+        "composite_score": composite,
+        "label": label,
+        "pain_point": _intent_pain_point(lead),
+        "personalized_opener": (
+            f"Saw your {source or 'platform'} request about '{title or 'this project'}' "
+            f"and it looks like you need a reliable partner who can move quickly."
+        ),
+        "best_channel": best_channel,
+        "urgency_signal": urgency_signal,
+        "red_flags": red_flags,
     }
 
 

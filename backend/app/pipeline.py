@@ -37,18 +37,20 @@ from app.scrapers.facebook_pages import scrape_facebook_pages
 # from app.scrapers.tradeindia import scrape_tradeindia
 
 # Scrapers — RE-ENABLED with BusinessQualifier gate (filters individuals, microbudgets, dead posts)
-
-# Scrapers — still disabled (intern-level, not buyers)
 from app.scrapers.freelancer import scrape_freelancer
 from app.scrapers.reddit import scrape_reddit
+from app.scrapers.bark import scrape_bark
+from app.scrapers.worknhire import scrape_worknhire
+from app.scrapers.peopleperhour import scrape_peopleperhour
+
+# Scrapers — still disabled (low quality)
 # from app.scrapers.truelancer import scrape_truelancer
-# from app.scrapers.internshala import scrape_internshala
 
 # Pain Signal Detection
 from app.pain_signals import batch_detect_pain_signals
 
 # Business Qualifier filter (runs right after scraping, before enrichment)
-from app.filters.business_qualifier import tag_directory_leads
+from app.filters.business_qualifier import qualify_batch, tag_directory_leads
 
 # Enrichment
 from app.enricher import enrich_lead
@@ -56,8 +58,11 @@ from app.enricher import enrich_lead
 # AI
 from app.ai import (
     score_lead,
+    score_intent_lead,
     compute_client_readiness_score,
+    _tag_intent_composite,
     _rule_based_scoring_fallback,
+    _rule_based_intent_scoring_fallback,
 )
 
 # Messages
@@ -84,11 +89,16 @@ def _deduplicate_within_batch(leads: list[dict]) -> list[dict]:
     """
     seen: dict[str, dict] = {}
     for lead in leads:
-        # Key = normalised company_name + city
-        key = (
-            (lead.get("company_name") or "").lower().strip(),
-            (lead.get("location") or "").lower().strip(),
-        )
+        source_url = (lead.get("source_url") or lead.get("contact_link") or "").lower().strip()
+        source = (lead.get("source") or "").lower().strip()
+        intent_level = (lead.get("source_intent_level") or "").lower().strip()
+        if source_url and intent_level == "active_request":
+            key = ("url", source, source_url)
+        else:
+            key = (
+                (lead.get("company_name") or "").lower().strip(),
+                (lead.get("location") or "").lower().strip(),
+            )
         if not key[0]:
             continue
         if key not in seen:
@@ -123,6 +133,12 @@ def _build_result(lead: dict) -> dict:
         "inactive_social":     lead.get("last_social_post_old") is True,
         "review_complaint":    lead.get("review_complaint", ""),
     }
+    direct_link = (
+        lead.get("platform_url")
+        or lead.get("contact_link")
+        or lead.get("source_url")
+        or ""
+    )
 
     return {
         "id":                       lead.get("_db_id"),
@@ -131,7 +147,8 @@ def _build_result(lead: dict) -> dict:
         "industry":                 lead.get("industry", lead.get("category", "")),
         "source":                   lead.get("source", ""),
         "source_url":               lead.get("source_url", ""),
-        "contact_link":             lead.get("contact_link", lead.get("source_url", "")),
+        "contact_link":             direct_link,
+        "direct_link":              direct_link,
         "phone":                    lead.get("phone", ""),
         "email":                    lead.get("email", ""),
         "website":                  lead.get("website", ""),
@@ -139,24 +156,27 @@ def _build_result(lead: dict) -> dict:
         "instagram_handle":         lead.get("instagram_handle", ""),
         "website_alive":            bool(lead.get("website_alive")),
         "company_size":             lead.get("company_size", ""),
-        # AI scores
         "fit_score":                int(lead.get("fit_score", 0)),
         "intent_score":             int(lead.get("intent_score", lead.get("buying_intent_score", 0))),
         "contact_score":            int(lead.get("contact_score", lead.get("contactability_score", 0))),
         "composite_score":          float(lead.get("composite_score", 0.0)),
-        # Client Readiness Score (deterministic: money + pain + reachability)
+        "request_clarity_score":    int(lead.get("request_clarity_score", 0)),
+        "budget_confidence_score":  int(lead.get("budget_confidence_score", 0)),
+        "platform_reachability_score": int(lead.get("platform_reachability_score", 0)),
+        "freshness_score":          int(lead.get("freshness_score", 0)),
         "client_readiness_score":   int(lead.get("client_readiness_score", 0)),
-        # Labels
         "label":                    lead.get("label", lead.get("priority_tag", "COLD")),
         "hot_reason":               lead.get("hot_reason", lead.get("score_reason", "")),
-        # Intel
         "pain_point":               lead.get("pain_point", ""),
         "pain_signals":             pain_signals_summary,
         "pain_template":            lead.get("pain_template", ""),
         "decision_maker":           lead.get("decision_maker", ""),
         "estimated_deal_size":      lead.get("estimated_deal_size", lead.get("estimated_deal", "")),
         "intent_signal":            lead.get("intent_signal", ""),
-        # Outreach
+        "best_channel":             lead.get("best_channel", ""),
+        "urgency_signal":           lead.get("urgency_signal", ""),
+        "red_flags":                lead.get("red_flags", []),
+        "platform_url":             lead.get("platform_url", direct_link),
         "whatsapp_msg":             lead.get("whatsapp_msg", ""),
         "whatsapp_variants":        lead.get("whatsapp_variants", []),
         "linkedin_msg":             lead.get("linkedin_msg", ""),
@@ -164,6 +184,17 @@ def _build_result(lead: dict) -> dict:
         "email_msg":                lead.get("email_msg", ""),
         "status":                   lead.get("status", "New"),
     }
+
+
+def _intent_source_fallback_link(source: str) -> str:
+    source = (source or "").lower().strip()
+    return {
+        "freelancer": "https://www.freelancer.com",
+        "internshala": "https://internshala.com",
+        "bark": "https://www.bark.com",
+        "worknhire": "https://worknhire.com",
+        "reddit": "https://www.reddit.com",
+    }.get(source, "")
 
 
 # ---------------------------------------------------------------------------
@@ -488,8 +519,9 @@ async def run_pipeline(
     print(f"\n[PIPELINE] Done! HOT={len(hot)} | WARM={len(warm)} | COLD={len(cold)}\n")
 
     # ── Build response ────────────────────────────────────────────────────
-    response_leads = [_build_result(l) for l in top_hot]
-    response_leads += [_build_result(l) for l in warm[:5]]
+    warm.sort(key=lambda x: float(x.get("composite_score") or 0), reverse=True)
+    cold.sort(key=lambda x: float(x.get("composite_score") or 0), reverse=True)
+    response_leads = [_build_result(l) for l in (hot + warm + cold)]
 
     return {
         "total_scraped_raw":      total_scraped_raw,
@@ -500,7 +532,7 @@ async def run_pipeline(
         "hot":                    len(hot),
         "warm":                   len(warm),
         "cold":                   len(cold),
-        "leads":                  response_leads[:max_leads],
+        "leads":                  response_leads,
         "scrape_date":            date.today().isoformat(),
     }
 
@@ -530,15 +562,18 @@ async def run_intent_pipeline(
 
     print(f"\n[INTENT PIPELINE] city={city!r} | industry={industry!r}")
     if on_progress:
-        on_progress("intent_scraping", "Scraping active-request sources (Freelancer, Reddit)...")
+            on_progress("intent_scraping", "Scraping active-request sources (Freelancer, Bark, WorkNHire, Reddit, PeoplePerHour)...")
 
     scrape_results = await asyncio.gather(
         scrape_freelancer(industry, city),
+        scrape_bark(industry, city),
+        scrape_worknhire(industry, city),
         scrape_reddit(industry, city),
+        scrape_peopleperhour(industry, city),
         return_exceptions=True,
     )
 
-    source_names = ["freelancer", "reddit"]
+    source_names = ["freelancer", "bark", "worknhire", "reddit", "peopleperhour"]
     raw_leads: list[dict] = []
     for name, result in zip(source_names, scrape_results):
         if isinstance(result, list):
@@ -561,7 +596,13 @@ async def run_intent_pipeline(
             "scrape_date": date.today().isoformat(),
         }
 
-    deduplicated_batch = _deduplicate_within_batch(raw_leads)
+    qualified_leads, rejected_leads = qualify_batch(raw_leads)
+    print(
+        f"[INTENT PIPELINE] Qualified {len(qualified_leads)} leads, "
+        f"rejected {len(rejected_leads)} low-quality posts"
+    )
+
+    deduplicated_batch = _deduplicate_within_batch(qualified_leads)
     new_leads = batch_filter_duplicates(deduplicated_batch)
     print(f"[INTENT PIPELINE] After dedup: {len(new_leads)}")
 
@@ -576,34 +617,59 @@ async def run_intent_pipeline(
                 f"Scoring intent lead {i + 1}/{len(new_leads)}: {lead.get('company_name', '')[:30]}...",
             )
         try:
-            scores = await asyncio.wait_for(score_lead(lead, context), timeout=90.0)
+            scores = await asyncio.wait_for(score_intent_lead(lead, context), timeout=90.0)
             if not scores:
                 raise ValueError("empty response")
             merged = {**lead, **scores}
-            merged["intent_score"] = scores.get("buying_intent_score", scores.get("intent_score", 0))
-            merged["contact_score"] = scores.get("contactability_score", scores.get("contact_score", 0))
+            canonical_link = (
+                merged.get("platform_url")
+                or merged.get("contact_link")
+                or merged.get("source_url")
+                or _intent_source_fallback_link(merged.get("source", ""))
+            )
+            if canonical_link:
+                merged["platform_url"] = canonical_link
+                merged["source_url"] = canonical_link
+                merged["contact_link"] = canonical_link
+            merged["intent_score"] = scores.get("request_clarity_score", scores.get("intent_score", 0))
+            merged["contact_score"] = scores.get("platform_reachability_score", scores.get("contact_score", 0))
             merged["label"] = scores.get("priority_tag", scores.get("label", "COLD"))
             merged["hot_reason"] = scores.get("score_reason", scores.get("hot_reason", ""))
             scored_leads.append(merged)
         except Exception as e:
             print(f"  [intent score] failed for '{lead.get('company_name')}': {e}")
-            fallback_scores = _rule_based_scoring_fallback(lead)
+            fallback_scores = _rule_based_intent_scoring_fallback(lead, context)
             fallback_scores["score_reason"] = (
                 f"Intent scoring fallback used. Error: {e}"
             )
             merged = {**lead, **fallback_scores}
-            merged["intent_score"] = fallback_scores.get("buying_intent_score", fallback_scores.get("intent_score", 0))
-            merged["contact_score"] = fallback_scores.get("contactability_score", fallback_scores.get("contact_score", 0))
+            canonical_link = (
+                merged.get("platform_url")
+                or merged.get("contact_link")
+                or merged.get("source_url")
+                or _intent_source_fallback_link(merged.get("source", ""))
+            )
+            if canonical_link:
+                merged["platform_url"] = canonical_link
+                merged["source_url"] = canonical_link
+                merged["contact_link"] = canonical_link
+            merged["intent_score"] = fallback_scores.get("request_clarity_score", fallback_scores.get("intent_score", 0))
+            merged["contact_score"] = fallback_scores.get("platform_reachability_score", fallback_scores.get("contact_score", 0))
             merged["label"] = fallback_scores.get("priority_tag", fallback_scores.get("label", "COLD"))
             merged["hot_reason"] = fallback_scores.get("score_reason", "")
             scored_leads.append(merged)
+        await asyncio.sleep(2)
 
     for lead in scored_leads:
         lead["client_readiness_score"] = compute_client_readiness_score(lead)
         weighted_score = lead.get("composite_score", 0)
-        if lead.get("client_readiness_score", 0) >= 70 and weighted_score >= 60:
-            weighted_score = min(weighted_score + 5, 100)
+        if lead.get("client_readiness_score", 0) >= 70 and weighted_score >= 6:
+            weighted_score = min(weighted_score + 0.5, 10)
             lead["composite_score"] = weighted_score
+
+    for lead in scored_leads:
+        lead["label"] = _tag_intent_composite(float(lead.get("composite_score") or 0))
+        lead["priority_tag"] = lead["label"]
 
     hot = [l for l in scored_leads if l.get("label") == "HOT"]
     warm = [l for l in scored_leads if l.get("label") == "WARM"]
@@ -621,15 +687,19 @@ async def run_intent_pipeline(
         except Exception as e:
             print(f"  [INTENT DB] save failed for '{lead.get('company_name')}': {e}")
 
-    response_leads = [_build_result(l) for l in (hot + warm + cold)[:max_leads]]
+    response_leads = [_build_result(l) for l in (hot + warm + cold)]
     print(f"[INTENT PIPELINE] HOT={len(hot)} | WARM={len(warm)} | COLD={len(cold)}")
 
     return {
         "total_scraped_raw": total_scraped_raw,
         "total_saved": saved,
         "hot": len(hot),
+        "hot_count": len(hot),
         "warm": len(warm),
+        "warm_count": len(warm),
         "cold": len(cold),
+        "cold_count": len(cold),
+        "sources_used": source_names,
         "leads": response_leads,
         "scrape_date": date.today().isoformat(),
     }

@@ -117,10 +117,15 @@ def batch_filter_duplicates(
     try:
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
-        cursor.execute("SELECT company_name, city FROM leads")
+        cursor.execute("SELECT company_name, city, source, source_url, contact_link FROM leads")
         existing = {
-            (_normalise(name or ""), _normalise(city or ""))
-            for name, city in cursor.fetchall()
+            (
+                _normalise(name or ""),
+                _normalise(city or ""),
+                (source or "").strip().lower(),
+                ((source_url or "").strip().lower() or (contact_link or "").strip().lower()),
+            )
+            for name, city, source, source_url, contact_link in cursor.fetchall()
         }
         conn.close()
     except Exception as e:
@@ -130,11 +135,24 @@ def batch_filter_duplicates(
     new_leads = []
     skipped = 0
     for lead in leads:
-        key = (
-            _normalise(lead.get("company_name", "")),
-            _normalise(lead.get("location", "")),
+        lead_name = _normalise(lead.get("company_name", ""))
+        lead_city = _normalise(lead.get("location", ""))
+        lead_source = (lead.get("source", "") or "").strip().lower()
+        lead_url = (
+            (lead.get("source_url", "") or "").strip().lower()
+            or (lead.get("contact_link", "") or "").strip().lower()
         )
-        if key[0] and key not in existing:
+        intent_level = (lead.get("source_intent_level", "") or "").strip().lower()
+
+        key = (lead_name, lead_city, lead_source, lead_url)
+        url_duplicate = (
+            intent_level == "active_request"
+            and lead_source
+            and lead_url
+            and any(row[2] == lead_source and row[3] == lead_url for row in existing)
+        )
+
+        if lead_name and not url_duplicate and key not in existing:
             new_leads.append(lead)
         else:
             skipped += 1
