@@ -3,7 +3,7 @@ import axios from 'axios'
 import { MOCK_LEADS, MOCK_STATS, MOCK_JOB } from './mockData'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
-const USE_MOCK = true // Set to false to use real backend
+const USE_MOCK = false // Set to true to use mock data instead of the backend
 
 const api = axios.create({
   baseURL: API_BASE_URL,

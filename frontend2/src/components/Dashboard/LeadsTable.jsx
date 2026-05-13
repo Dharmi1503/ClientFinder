@@ -6,12 +6,19 @@ import LeadDetailsModal from './LeadDetailsModal'
 
 const STATUS_OPTIONS = ['New', 'Contacted', 'Replied', 'Meeting', 'Closed', 'Dead']
 const PAGE_SIZE = 10
+const VIEW_OPTIONS = [
+  { label: 'Recent', value: 'recent' },
+  { label: 'HOT', value: 'HOT' },
+  { label: 'WARM', value: 'WARM' },
+  { label: 'COLD', value: 'COLD' },
+]
 
 export default function LeadsTable({ refreshTrigger }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [view, setView] = useState('recent')
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState(null)
   const [selectedLead, setSelectedLead] = useState(null)
@@ -19,7 +26,8 @@ export default function LeadsTable({ refreshTrigger }) {
   const fetchLeads = async () => {
     setLoading(true)
     try {
-      const params = { page, page_size: PAGE_SIZE }
+      const params = { page, page_size: PAGE_SIZE, sort_by: view === 'recent' ? 'recent' : 'score' }
+      if (view !== 'recent') params.label = view
       // backend supports city/source text filter — use search as city for now
       if (search) params.city = search
       const data = await apiService.getLeads(params)
@@ -32,13 +40,13 @@ export default function LeadsTable({ refreshTrigger }) {
     }
   }
 
-  useEffect(() => { fetchLeads() }, [page, refreshTrigger])
+  useEffect(() => { fetchLeads() }, [page, view, refreshTrigger])
 
   // Debounce search
   useEffect(() => {
     const t = setTimeout(() => { setPage(1); fetchLeads() }, 400)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, view])
 
   const handleStatusChange = async (id, status) => {
     setUpdatingId(id)
@@ -72,7 +80,10 @@ export default function LeadsTable({ refreshTrigger }) {
       {/* Header */}
       <div className="p-6 border-b border-gray-200 dark:border-gray-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h3 className="text-xl font-semibold">Recent Leads</h3>
+          <div>
+            <h3 className="text-xl font-semibold">Recent Leads</h3>
+            <p className="text-sm text-gray-500">Showing the newest pipeline results by default.</p>
+          </div>
           <div className="flex gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -85,6 +96,25 @@ export default function LeadsTable({ refreshTrigger }) {
               />
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {VIEW_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                setPage(1)
+                setView(option.value)
+              }}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                view === option.value
+                  ? 'bg-indigo-500 text-white border-indigo-500'
+                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:border-indigo-400'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
 
