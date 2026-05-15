@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS leads (
     -- Internal
     intent_signal       TEXT    DEFAULT '',
     description         TEXT    DEFAULT '',
+    pipeline_type       TEXT    DEFAULT 'main_pipeline',  -- main_pipeline / intent_pipeline
     created_at          TEXT    DEFAULT (datetime('now')),
     updated_at          TEXT    DEFAULT (datetime('now'))
 );
@@ -211,6 +212,7 @@ def create_tables() -> None:
         _ensure_column(conn, "leads", "pain_signals_json",      "TEXT DEFAULT ''")
         _ensure_column(conn, "leads", "pain_template",          "TEXT DEFAULT ''")
         _ensure_column(conn, "leads", "instagram_handle",       "TEXT DEFAULT ''")
+        _ensure_column(conn, "leads", "pipeline_type",          "TEXT DEFAULT 'main_pipeline'")
     print("[database] Tables ready.")
 
 
@@ -516,6 +518,7 @@ def save_lead(lead: dict) -> int:
         "notes":               (lead.get("notes") or "")[:1000],
         "intent_signal":       (lead.get("intent_signal") or "")[:500],
         "description":         (lead.get("description") or lead.get("snippet") or "")[:500],
+        "pipeline_type":       (lead.get("pipeline_type") or "main_pipeline")[:50],
     }
 
     with _get_conn() as conn:
@@ -569,6 +572,7 @@ def get_all_leads(
     max_score: int = 100,
     review_status: str | None = None,
     source: str | None = None,
+    pipeline_type: str | None = None,
     has_email: bool = False,
     has_phone: bool = False,
     sort_by: str = "recent",
@@ -603,6 +607,10 @@ def get_all_leads(
     if source:
         conditions.append("LOWER(source) = ?")
         values.append(source.strip().lower())
+    
+    if pipeline_type:
+        conditions.append("LOWER(pipeline_type) = ?")
+        values.append(pipeline_type.strip().lower())
 
     if has_email:
         conditions.append("email IS NOT NULL AND TRIM(email) != ''")

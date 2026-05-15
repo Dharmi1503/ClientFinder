@@ -13,6 +13,12 @@ const VIEW_OPTIONS = [
   { label: 'COLD', value: 'COLD' },
 ]
 
+const PIPELINE_OPTIONS = [
+  { label: 'All Leads', value: 'all' },
+  { label: 'Main Discovery', value: 'main_pipeline' },
+  { label: 'Intent-Only', value: 'intent_pipeline' },
+]
+
 export default function LeadsTable({ refreshTrigger }) {
   const [leads, setLeads] = useState([])
   const [total, setTotal] = useState(0)
@@ -22,6 +28,7 @@ export default function LeadsTable({ refreshTrigger }) {
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState(null)
   const [selectedLead, setSelectedLead] = useState(null)
+  const [pipeline, setPipeline] = useState('all')
 
   const fetchLeads = async () => {
     setLoading(true)
@@ -30,6 +37,7 @@ export default function LeadsTable({ refreshTrigger }) {
       if (view !== 'recent') params.label = view
       // backend supports city/source text filter — use search as city for now
       if (search) params.city = search
+      if (pipeline !== 'all') params.pipeline = pipeline
       const data = await apiService.getLeads(params)
       setLeads(data.results || [])
       setTotal(data.total || 0)
@@ -40,13 +48,13 @@ export default function LeadsTable({ refreshTrigger }) {
     }
   }
 
-  useEffect(() => { fetchLeads() }, [page, view, refreshTrigger])
+  useEffect(() => { fetchLeads() }, [page, view, pipeline, refreshTrigger])
 
   // Debounce search
   useEffect(() => {
     const t = setTimeout(() => { setPage(1); fetchLeads() }, 400)
     return () => clearTimeout(t)
-  }, [search, view])
+  }, [search, view, pipeline])
 
   const handleStatusChange = async (id, status) => {
     setUpdatingId(id)
@@ -98,23 +106,44 @@ export default function LeadsTable({ refreshTrigger }) {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {VIEW_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => {
-                setPage(1)
-                setView(option.value)
-              }}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
-                view === option.value
-                  ? 'bg-indigo-500 text-white border-indigo-500'
-                  : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:border-indigo-400'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="mt-4 flex flex-col md:flex-row justify-between gap-4">
+          <div className="flex flex-wrap gap-2">
+            {VIEW_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  setPage(1)
+                  setView(option.value)
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                  view === option.value
+                    ? 'bg-indigo-500 text-white border-indigo-500'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:border-indigo-400'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit self-end">
+            {PIPELINE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setPage(1)
+                  setPipeline(opt.value)
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  pipeline === opt.value
+                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -154,7 +183,16 @@ export default function LeadsTable({ refreshTrigger }) {
                 >
                   <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                     <div className="flex flex-col">
-                      <span>{lead.company_name}</span>
+                      <div className="flex items-center gap-2">
+                        <span>{lead.company_name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase ${
+                          lead.pipeline_type === 'intent_pipeline' 
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {lead.pipeline_type === 'intent_pipeline' ? 'Intent' : 'Main'}
+                        </span>
+                      </div>
                       {lead.rating && (
                         <span className="text-[10px] text-amber-500 flex items-center gap-0.5">
                           ⭐ {lead.rating} ({lead.review_count || 0} reviews)

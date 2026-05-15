@@ -183,6 +183,7 @@ def _build_result(lead: dict) -> dict:
         "email_subject":            lead.get("email_subject", ""),
         "email_msg":                lead.get("email_msg", ""),
         "status":                   lead.get("status", "New"),
+        "pipeline_type":            lead.get("pipeline_type", "main_pipeline"),
     }
 
 
@@ -504,6 +505,7 @@ async def run_pipeline(
     saved = 0
     for lead in all_scored:
         try:
+            lead["pipeline_type"] = "main_pipeline"
             db_id = save_lead(lead)
             lead["_db_id"] = db_id
             saved += 1
@@ -681,6 +683,7 @@ async def run_intent_pipeline(
     saved = 0
     for lead in scored_leads:
         try:
+            lead["pipeline_type"] = "intent_pipeline"
             db_id = save_lead(lead)
             lead["_db_id"] = db_id
             saved += 1

@@ -73,22 +73,22 @@ class FindClientsRequest(BaseModel):
     service: str = Field(
         ...,
         description="What you offer - e.g. 'AI automation for businesses'",
-        example="AI automation and website development",
+        examples=["AI automation and website development"],
     )
     industry: str = Field(
         ...,
         description="Target industry / keyword - e.g. 'hospitals', 'restaurants'",
-        example="hospitals",
+        examples=["hospitals"],
     )
     location: str = Field(
         ...,
         description="Indian city to target",
-        example="Delhi",
+        examples=["Delhi"],
     )
     budget_range: str = Field(
         default="Rs50k-Rs2L",
         description="Your typical deal size - used by AI for scoring",
-        example="Rs50k-Rs2L",
+        examples=["Rs50k-Rs2L"],
     )
     max_leads: int = Field(
         default=10,
@@ -106,7 +106,7 @@ class StatusUpdateRequest(BaseModel):
     status: str = Field(
         ...,
         description="New | Contacted | Replied | Meeting | Closed | Dead",
-        example="Contacted",
+        examples=["Contacted"],
     )
 
 
@@ -114,7 +114,7 @@ class FollowUpRequest(BaseModel):
     follow_up_date: str = Field(
         ...,
         description="Follow-up date in YYYY-MM-DD format",
-        example="2026-04-10",
+        examples=["2026-04-10"],
     )
     notes: str = Field(
         default="",
@@ -126,7 +126,7 @@ class ReviewUpdateRequest(BaseModel):
     action: str = Field(
         ...,
         description="approved or rejected",
-        example="approved",
+        examples=["approved"],
     )
     note: str = Field(
         default="",
@@ -415,6 +415,9 @@ async def get_leads(
     source: Optional[str] = Query(
         None, description="Lead source like justdial or google_maps"
     ),
+    pipeline: Optional[str] = Query(
+        None, description="Filter by pipeline type: main_pipeline | intent_pipeline"
+    ),
     has_email: bool = Query(False, description="Only return leads that have an email"),
     has_phone: bool = Query(False, description="Only return leads that have a phone"),
     sort_by: str = Query("recent", description="recent | score | oldest"),
@@ -440,6 +443,7 @@ async def get_leads(
         max_score=max_score,
         review_status=review_status,
         source=source,
+        pipeline_type=pipeline,
         has_email=has_email,
         has_phone=has_phone,
         sort_by=sort_by,

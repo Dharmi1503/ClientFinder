@@ -71,10 +71,10 @@ export const apiService = {
         buying_signals: ["Search intent detected", "Real-time discovery"],
         hot_reason: "Direct match with search criteria."
       }
-      
+
       // Add to start of list and persist
       saveMockLeads([newLead, ...localMockLeads])
-      
+
       return new Promise(resolve => {
         setTimeout(() => resolve({ job_id: "job_mock_" + Date.now() }), 1000)
       })
@@ -94,18 +94,18 @@ export const apiService = {
     if (USE_MOCK) {
       return new Promise(resolve => {
         setTimeout(() => resolve({
-            ...MOCK_JOB,
-            id: jobId,
-            result: {
-                total_leads: 1,
-                hot_leads: [localMockLeads[0]]
-            }
+          ...MOCK_JOB,
+          id: jobId,
+          result: {
+            total_leads: 1,
+            hot_leads: [localMockLeads[0]]
+          }
         }), 1500)
       })
     }
     return api.get(`/jobs/${jobId}`)
   },
-  
+
   getAllJobs: () => USE_MOCK ? Promise.resolve([MOCK_JOB]) : api.get('/jobs'),
 
   // Leads
@@ -115,7 +115,7 @@ export const apiService = {
       if (params.label) {
         filtered = filtered.filter(l => l.label === params.label)
       }
-      
+
       return new Promise(resolve => {
         setTimeout(() => resolve({
           results: filtered,
@@ -136,10 +136,10 @@ export const apiService = {
   reviewLead: (id, action) => api.patch(`/leads/${id}/review`, { action }),
   getReviewQueue: () => {
     if (USE_MOCK) {
-        return Promise.resolve({ 
-            total: 12,
-            results: localMockLeads.slice(0, 3) 
-        })
+      return Promise.resolve({
+        total: 12,
+        results: localMockLeads.slice(0, 3)
+      })
     }
     return api.get('/leads/review-queue')
   },
