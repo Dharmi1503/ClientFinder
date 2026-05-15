@@ -21,6 +21,7 @@ import sqlite3
 import json
 from datetime import date, datetime
 from pathlib import Path
+import secrets
 
 from app.review_config import (
     LEAD_SCORE_THRESHOLD,
@@ -188,6 +189,17 @@ CREATE TABLE IF NOT EXISTS llm_health_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_llm_health_log_logged_at ON llm_health_log (logged_at DESC);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT    NOT NULL UNIQUE,
+    name        TEXT    DEFAULT '',
+    created_by  TEXT    DEFAULT '',
+    created_at  TEXT    DEFAULT (datetime('now')),
+    is_active   INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys (key);
 """
 
 _TRIGGER_UPDATED_AT = """
@@ -870,3 +882,52 @@ def update_review(lead_id: int, action: str, note: str = "") -> None:
 def ensure_db() -> None:
     """Safe to call repeatedly — only creates tables if missing."""
     create_tables()
+
+
+# ---------------------------------------------------------------------------
+# API Key CRUD
+# ---------------------------------------------------------------------------
+
+
+def create_api_key(name: str, created_by: str | None = None) -> str:
+    """Generate a new API key, store it and return the plaintext key.
+
+    Key format: cf_ + secrets.token_urlsafe(32)
+    """
+    key = "cf_" + secrets.token_urlsafe(32)
+    created_by_val = (created_by or "admin")[:200]
+    with _get_conn() as conn:
+        conn.execute(
+            "INSERT INTO api_keys (key, name, created_by, is_active) VALUES (?, ?, ?, 1)",
+            (key, (name or "")[:200], created_by_val),
+        )
+    return key
+
+
+def get_api_key(key: str) -> dict | None:
+    """Return the api_keys row for `key` or None if not found."""
+    if not key:
+        return None
+    with _get_conn() as conn:
+        row = conn.execute("SELECT * FROM api_keys WHERE key = ? LIMIT 1", (key,)).fetchone()
+    return dict(row) if row else None
+
+
+def revoke_api_key(key: str) -> bool:
+    """Mark the API key as inactive. Returns True if a row was updated."""
+    with _get_conn() as conn:
+        cur = conn.execute("UPDATE api_keys SET is_active = 0 WHERE key = ? AND is_active = 1", (key,))
+        return cur.rowcount > 0
+
+
+def list_api_keys() -> list[dict]:
+    """Return all API keys with metadata (exclude plaintext key by default consumer choice).
+
+    Returned fields include: id, name, created_by, created_at, is_active, key
+    Admin endpoints may choose which fields to expose.
+    """
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, key, name, created_by, created_at, is_active FROM api_keys ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]

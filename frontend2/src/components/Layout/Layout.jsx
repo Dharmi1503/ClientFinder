@@ -3,7 +3,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function Layout({ children, isDark, setIsDark }) {
+export default function Layout({ children, isDark, setIsDark, onLogout }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
@@ -12,10 +12,10 @@ export default function Layout({ children, isDark, setIsDark }) {
       <div className="blob-animation top-20 -left-20" />
       <div className="blob-animation bottom-20 -right-20" style={{ animationDelay: '-5s' }} />
       
-      <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+      <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} onLogout={onLogout} />
       
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
-        <Header isDark={isDark} setIsDark={setIsDark} />
+        <Header isDark={isDark} setIsDark={setIsDark} onLogout={onLogout} />
         
         <AnimatePresence mode="wait">
           <motion.main

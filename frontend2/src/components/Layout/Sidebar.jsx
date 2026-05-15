@@ -23,7 +23,7 @@ const navItems = [
   { path: '/operations', icon: Settings, label: 'Operations' },
 ]
 
-export default function Sidebar({ collapsed, setCollapsed }) {
+export default function Sidebar({ collapsed, setCollapsed, onLogout }) {
   return (
     <motion.aside
       initial={false}
@@ -53,6 +53,7 @@ export default function Sidebar({ collapsed, setCollapsed }) {
               <Brain className="w-6 h-6 text-white" />
             </div>
           )}
+
         </div>
 
         {/* Navigation */}
@@ -102,19 +103,23 @@ export default function Sidebar({ collapsed, setCollapsed }) {
                 </div>
               )}
             </div>
-            
             {!collapsed && (
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 flex items-center justify-between">
-                <button className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all">
+                <button 
+                  onClick={onLogout}
+                  className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                  title="Logout"
+                >
                   <LogOut className="w-4 h-4" />
                 </button>
-                <button className="p-2 text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all">
+                <button className="p-2 text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all" title="Settings">
                   <Settings className="w-4 h-4" />
                 </button>
               </div>
             )}
           </div>
         </div>
+
 
         {/* Collapse Toggle */}
         <button

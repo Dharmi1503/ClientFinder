@@ -250,9 +250,13 @@ async def scrape_website(domain: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             headers = {"User-Agent": "Mozilla/5.0 (compatible; LeadBot/1.0)"}
-            resp = await client.get(url, headers=headers)
-            html = resp.text
-            alive = len(html.strip()) > 500
+            try:
+                resp = await client.get(url, headers=headers)
+                html = resp.text
+                alive = len(html.strip()) > 500
+            except Exception as exc:
+                logging.warning("[enricher] website check failed for %s: %s", domain, exc)
+                return {"email": "", "phone": "", "services_text": "", "alive": False, "decision_maker": ""}
 
             # --- Parse homepage ---
             if BS4_AVAILABLE:
@@ -465,6 +469,7 @@ async def enrich_lead(lead: dict, fast_mode: bool = True) -> dict:
 
     # ── Merge website data ────────────────────────────────────────────────
     site_data = result_map.get("website")
+    lead["website_alive"] = False
     if isinstance(site_data, dict):
         if not lead.get("phone")          and site_data.get("phone"):
             lead["phone"]          = site_data["phone"]
@@ -473,7 +478,11 @@ async def enrich_lead(lead: dict, fast_mode: bool = True) -> dict:
         if not lead.get("decision_maker") and site_data.get("decision_maker"):
             lead["decision_maker"] = site_data["decision_maker"]
         lead["services_text"] = site_data.get("services_text", "")
-        lead["website_alive"] = site_data.get("alive", False)
+        try:
+            lead["website_alive"] = bool(site_data.get("alive", False))
+        except Exception as exc:
+            logging.warning("website_alive merge failed for %s: %s", lead.get("website") or lead.get("company_name"), exc)
+            lead["website_alive"] = False
     else:
         lead["services_text"] = ""
         lead["website_alive"] = False

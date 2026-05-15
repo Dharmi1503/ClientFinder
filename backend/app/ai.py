@@ -46,7 +46,7 @@ def compute_priority_tag(fit: int, intent: int, contactability: int) -> tuple[st
     HOT/WARM/COLD label from weighted composite score.
     Weights: fit=40%, intent=40%, contactability=20%
 
-    HOT  : composite >= 72
+    HOT  : composite >= 60
     WARM : composite >= 48
     COLD : below 48
 
@@ -54,7 +54,7 @@ def compute_priority_tag(fit: int, intent: int, contactability: int) -> tuple[st
     prevents hallucinated scores producing wrong labels.
     """
     composite = (fit * 0.40) + (intent * 0.40) + (contactability * 0.20)
-    if composite >= 72:
+    if composite >= 60:
         tag = "HOT"
     elif composite >= 48:
         tag = "WARM"
@@ -868,6 +868,16 @@ def _rule_based_scoring_fallback(lead: dict | None = None) -> dict:
         score += 10
     if lead.get("hiring_manual_roles") is True:
         score += 10
+    if lead.get("negative_reviews_found"):
+        score += 15
+    if lead.get("website_is_outdated"):
+        score += 10
+    if lead.get("no_google_maps_listing"):
+        score += 10
+    if lead.get("hiring_manual_roles"):
+        score += 8
+    if lead.get("last_social_post_old"):
+        score += 8
 
     try:
         from app.database import get_source_weight
