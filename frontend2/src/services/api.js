@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const API_KEY_STORAGE = 'clientfinder_api_key'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,8 +10,15 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) config.headers.Authorization = `Bearer ${token}`
+    const headers = config.headers || {}
+    const explicitKey = headers['X-API-Key'] || headers['x-api-key']
+    const storedKey = localStorage.getItem(API_KEY_STORAGE)
+
+    if (!explicitKey && storedKey) {
+      headers['X-API-Key'] = storedKey
+    }
+
+    config.headers = headers
     return config
   },
   (error) => Promise.reject(error)
@@ -20,9 +28,25 @@ api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     console.error('API Error:', error.response?.data || error.message)
+    if (error.response?.status === 403) {
+      localStorage.removeItem(API_KEY_STORAGE)
+      window.dispatchEvent(new CustomEvent('clientfinder-api-key-cleared'))
+    }
     throw error.response?.data || { error: error.message }
   }
 )
+
+export const getStoredApiKey = () => localStorage.getItem(API_KEY_STORAGE) || ''
+export const setStoredApiKey = (key) => {
+  localStorage.setItem(API_KEY_STORAGE, key)
+  window.dispatchEvent(new CustomEvent('clientfinder-api-key-changed'))
+}
+export const clearStoredApiKey = () => {
+  localStorage.removeItem(API_KEY_STORAGE)
+  window.dispatchEvent(new CustomEvent('clientfinder-api-key-cleared'))
+}
+
+export const verifyApiKey = (key) => api.get('/health', { headers: { 'X-API-Key': key } })
 
 export const apiService = {
   // Health

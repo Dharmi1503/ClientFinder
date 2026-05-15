@@ -23,7 +23,7 @@ const navItems = [
   { path: '/operations', icon: Settings, label: 'Operations' },
 ]
 
-export default function Sidebar({ collapsed, setCollapsed }) {
+export default function Sidebar({ collapsed, setCollapsed, onLogout }) {
   return (
     <motion.aside
       initial={false}
@@ -55,6 +55,7 @@ export default function Sidebar({ collapsed, setCollapsed }) {
             </div>
           )}
           <button
+            type="button"
             onClick={() => setCollapsed(!collapsed)}
             className="absolute -right-3 top-8 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
@@ -87,6 +88,7 @@ export default function Sidebar({ collapsed, setCollapsed }) {
         {/* User Profile */}
         <div className="border-t border-gray-200 dark:border-gray-800 p-5">
           <button
+            type="button"
             className={`flex items-center gap-3 w-full ${collapsed ? 'justify-center' : ''}`}
           >
             <div className="w-9 h-9 bg-gradient-to-br from-primary-400 to-accent-400 rounded-full flex items-center justify-center">
@@ -100,7 +102,11 @@ export default function Sidebar({ collapsed, setCollapsed }) {
             )}
           </button>
           {!collapsed && (
-            <button className="flex items-center gap-3 w-full mt-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-3 w-full mt-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
               <LogOut className="w-4 h-4" />
               <span className="text-sm">Logout</span>
             </button>

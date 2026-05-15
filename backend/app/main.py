@@ -19,16 +19,22 @@ Run with:
 import asyncio
 import time
 import uuid
+import os
 from datetime import date
 from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from dotenv import load_dotenv
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.database import (
     ensure_db,
+    create_api_key,
+    get_api_key,
+    revoke_api_key,
+    list_api_keys,
     get_all_leads,
     get_all_source_quality,
     get_followups_today,
@@ -65,8 +71,42 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    # Load environment (ADMIN_KEY) from .env if present
+    try:
+        load_dotenv()
+    except Exception:
+        pass
     ensure_db()
     print("[STARTUP] ClientFinder v2 ready on port 7000")
+
+
+# ---------------------------------------------------------------------------
+# Auth dependencies
+# ---------------------------------------------------------------------------
+
+
+def require_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> dict:
+    """FastAPI dependency that verifies the provided X-API-Key header.
+
+    On success returns the api_keys row as a dict. On failure raises 403.
+    """
+    if not x_api_key:
+        raise HTTPException(status_code=403, detail="Missing API key")
+    row = get_api_key(x_api_key)
+    if not row:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    if not int(row.get("is_active", 0)):
+        raise HTTPException(status_code=403, detail="API key revoked")
+    return row
+
+
+def require_admin(x_admin_key: str = Header(None, alias="X-Admin-Key")) -> None:
+    """Require the admin key from environment to access admin endpoints."""
+    admin_key = os.getenv("ADMIN_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=403, detail="Admin access not configured")
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
 
 
 class FindClientsRequest(BaseModel):
@@ -134,8 +174,49 @@ class ReviewUpdateRequest(BaseModel):
     )
 
 
+class AdminCreateKeyRequest(BaseModel):
+    name: str = Field(..., description="Name for the API key (e.g. username)")
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints (protected by ADMIN_KEY env var via X-Admin-Key header)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/admin/keys")
+async def admin_create_key(body: AdminCreateKeyRequest, _admin: None = Depends(require_admin)):
+    """Create a new API key for a user. Returns the generated key string."""
+    key = create_api_key(body.name, created_by="admin")
+    return {"key": key}
+
+
+@app.delete("/admin/keys/{key}")
+async def admin_revoke_key(key: str, _admin: None = Depends(require_admin)):
+    """Revoke (deactivate) an API key. Returns 200 if successful."""
+    ok = revoke_api_key(key)
+    if not ok:
+        raise HTTPException(status_code=404, detail="API key not found or already revoked")
+    return {"ok": True}
+
+
+@app.get("/admin/keys")
+async def admin_list_keys(_admin: None = Depends(require_admin)):
+    """List stored API keys with metadata: name, created_by, created_at, is_active."""
+    rows = list_api_keys()
+    result = [
+        {
+            "name": r.get("name"),
+            "created_by": r.get("created_by"),
+            "created_at": r.get("created_at"),
+            "is_active": bool(r.get("is_active")),
+        }
+        for r in rows
+    ]
+    return {"count": len(result), "keys": result}
+
+
 @app.get("/api/health")
-async def health():
+async def health(api_key: dict = Depends(require_api_key)):
     """Quick health check that confirms the API is up."""
     return {
         "status": "ok",
@@ -146,7 +227,7 @@ async def health():
 
 
 @app.get("/api/calibration")
-async def get_calibration():
+async def get_calibration(api_key: dict = Depends(require_api_key)):
     """
     Returns real-deal close rates by source and industry, plus
     current score floor adjustments derived from closed leads.
@@ -176,7 +257,7 @@ async def get_calibration():
 
 
 @app.post("/api/find-clients")
-async def find_clients(request: FindClientsRequest, background_tasks: BackgroundTasks):
+async def find_clients(request: FindClientsRequest, background_tasks: BackgroundTasks, api_key: dict = Depends(require_api_key)):
     """
     Start the lead generation pipeline as a background job.
 
@@ -259,7 +340,7 @@ async def find_clients(request: FindClientsRequest, background_tasks: Background
 
 
 @app.post("/api/find-clients/intent")
-async def find_clients_intent(request: Request, background_tasks: BackgroundTasks):
+async def find_clients_intent(request: Request, background_tasks: BackgroundTasks, api_key: dict = Depends(require_api_key)):
     """
     Start the intent pipeline only.
     Scrapes Freelancer + Reddit for active buyer signals.
@@ -335,7 +416,7 @@ async def find_clients_intent(request: Request, background_tasks: BackgroundTask
 
 
 @app.get("/api/jobs/{job_id}")
-async def get_job(job_id: str):
+async def get_job(job_id: str, api_key: dict = Depends(require_api_key)):
     """
     Poll for pipeline results.
 
@@ -350,14 +431,14 @@ async def get_job(job_id: str):
 
 
 @app.get("/api/jobs")
-async def list_jobs():
+async def list_jobs(api_key: dict = Depends(require_api_key)):
     """List all pipeline jobs started this session."""
     return [{k: v for k, v in job.items() if k != "result"} for job in _JOBS.values()]
 
 
 @app.get("/scrapers/health")
 @app.get("/api/scrapers/health", include_in_schema=False)
-async def scraper_health():
+async def scraper_health(api_key: dict = Depends(require_api_key)):
     """Return the latest run stats for all scraper sources."""
     rows = get_scraper_health()
     return {
@@ -368,7 +449,7 @@ async def scraper_health():
 
 @app.get("/scrapers/health/{source}")
 @app.get("/api/scrapers/health/{source}", include_in_schema=False)
-async def scraper_health_by_source(source: str):
+async def scraper_health_by_source(source: str, api_key: dict = Depends(require_api_key)):
     """Return the last 10 runs for a specific scraper source."""
     rows = get_scraper_health_for_source(source, limit=10)
     return {
@@ -380,7 +461,7 @@ async def scraper_health_by_source(source: str):
 
 @app.get("/sources/quality")
 @app.get("/api/sources/quality", include_in_schema=False)
-async def sources_quality():
+async def sources_quality(api_key: dict = Depends(require_api_key)):
     """Return source quality and weight for all sources, worst first."""
     rows = get_all_source_quality()
     return {
@@ -391,7 +472,7 @@ async def sources_quality():
 
 @app.get("/llm/health")
 @app.get("/api/llm/health", include_in_schema=False)
-async def llm_health():
+async def llm_health(api_key: dict = Depends(require_api_key)):
     """Return tier usage, avg response time, and failure rate in the last 24 hours."""
     rows = get_llm_health_summary()
     return {
@@ -420,6 +501,7 @@ async def get_leads(
     sort_by: str = Query("recent", description="recent | score | oldest"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Results per page"),
+    api_key: dict = Depends(require_api_key),
 ):
     """
     Fetch saved leads from the database with optional filters.
@@ -458,6 +540,7 @@ async def get_leads(
 @app.get("/leads/review-queue", include_in_schema=False)
 async def review_queue(
     limit: int = Query(200, ge=1, le=1000, description="Max rows to return"),
+    api_key: dict = Depends(require_api_key),
 ):
     """Return all leads awaiting human review."""
     leads = get_review_queue(limit=limit)
@@ -472,6 +555,7 @@ async def review_queue(
 @app.get("/leads/rejected", include_in_schema=False)
 async def rejected_leads(
     limit: int = Query(200, ge=1, le=1000, description="Max rows to return"),
+    api_key: dict = Depends(require_api_key),
 ):
     """Return rejected leads and the reasons they failed input validation."""
     leads = get_rejected_leads(limit=limit)
@@ -482,7 +566,7 @@ async def rejected_leads(
 
 
 @app.put("/api/leads/{lead_id}/status")
-async def patch_status(lead_id: int, body: StatusUpdateRequest):
+async def patch_status(lead_id: int, body: StatusUpdateRequest, api_key: dict = Depends(require_api_key)):
     """
     Update a lead's pipeline status.
 
@@ -496,7 +580,7 @@ async def patch_status(lead_id: int, body: StatusUpdateRequest):
 
 
 @app.put("/api/leads/{lead_id}/followup")
-async def patch_followup(lead_id: int, body: FollowUpRequest):
+async def patch_followup(lead_id: int, body: FollowUpRequest, api_key: dict = Depends(require_api_key)):
     """
     Set a follow-up date (YYYY-MM-DD) and optional note for a lead.
     Notes are appended - existing notes are not overwritten.
@@ -514,7 +598,7 @@ async def patch_followup(lead_id: int, body: FollowUpRequest):
 
 @app.patch("/api/leads/{lead_id}/review")
 @app.patch("/leads/{lead_id}/review", include_in_schema=False)
-async def patch_review(lead_id: int, body: ReviewUpdateRequest):
+async def patch_review(lead_id: int, body: ReviewUpdateRequest, api_key: dict = Depends(require_api_key)):
     """Approve or reject a lead after human review."""
     try:
         update_review(lead_id, body.action, body.note)
@@ -531,7 +615,7 @@ async def patch_review(lead_id: int, body: ReviewUpdateRequest):
 
 
 @app.get("/api/leads/followup-today")
-async def followup_today():
+async def followup_today(api_key: dict = Depends(require_api_key)):
     """
     Return all leads with a follow-up scheduled for today.
     Use this for your daily outreach routine.
