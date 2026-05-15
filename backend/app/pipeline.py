@@ -382,6 +382,7 @@ async def run_pipeline(
     for i in range(0, len(new_leads), _BATCH_SIZE):
         batch = new_leads[i: i + _BATCH_SIZE]
         results = await asyncio.gather(
+            # set False for better enrichment and more HOT leads
             *[enrich_lead(lead, fast_mode=fast_mode) for lead in batch],
             return_exceptions=True,
         )

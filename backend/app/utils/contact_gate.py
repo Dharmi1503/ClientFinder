@@ -4,7 +4,7 @@ utils/contact_gate.py
 Contact Gate — Zero-Contact Lead Handler
 -----------------------------------------
 If a lead has absolutely no contact method after full enrichment
-(no phone, no email, no live website), it cannot be acted on.
+(no phone, no email, no website URL, no LinkedIn), it cannot be acted on.
 
 What we do:
   - Force contact_score = 0
@@ -33,7 +33,7 @@ def _count_contact_methods(lead: dict) -> int:
         count += 1
     if lead.get("email", "").strip():
         count += 1
-    if lead.get("website", "").strip() and lead.get("website_alive"):
+    if lead.get("website", "").strip():
         count += 1
     if lead.get("linkedin_url", "").strip():
         count += 1
@@ -48,6 +48,9 @@ def apply_contact_gate(lead: dict) -> dict:
       - Sets contact_score = 0
       - Sets label = "COLD"
       - Adds a note explaining why
+
+        A website URL counts as a contact route even if website_alive is false,
+        so more leads can reach AI scoring when the site exists but health checks fail.
 
     Always returns the lead (modified if gated).
 
@@ -66,7 +69,7 @@ def apply_contact_gate(lead: dict) -> dict:
 
         # Preserve existing note if any, append reason
         existing_note = lead.get("notes", "")
-        gate_note = "Contact gate: no phone/email/live website found after enrichment."
+        gate_note = "Contact gate: no phone/email/website/LinkedIn found after enrichment."
         lead["notes"] = f"{existing_note} | {gate_note}".strip(" |")
 
         print(
