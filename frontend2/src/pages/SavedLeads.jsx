@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useLocation } from 'react-router-dom'
 import { 
   Search, 
   Filter, 
@@ -25,10 +26,19 @@ export default function SavedLeads() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [selectedLead, setSelectedLead] = useState(null)
+  const location = useLocation()
 
   useEffect(() => {
     fetchLeads()
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const searchQuery = params.get('search')
+    if (searchQuery) {
+      setSearch(searchQuery)
+    }
+  }, [location.search])
 
   const fetchLeads = async () => {
     try {

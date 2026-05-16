@@ -30,13 +30,14 @@ export default function LeadsTable({ refreshTrigger }) {
   const [selectedLead, setSelectedLead] = useState(null)
   const [pipeline, setPipeline] = useState('all')
 
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
   const fetchLeads = async () => {
     setLoading(true)
     try {
       const params = { page, page_size: PAGE_SIZE, sort_by: view === 'recent' ? 'recent' : 'score' }
       if (view !== 'recent') params.label = view
-      // backend supports city/source text filter — use search as city for now
-      if (search) params.city = search
+      if (debouncedSearch) params.city = debouncedSearch
       if (pipeline !== 'all') params.pipeline = pipeline
       const data = await apiService.getLeads(params)
       setLeads(data.results || [])
@@ -48,13 +49,18 @@ export default function LeadsTable({ refreshTrigger }) {
     }
   }
 
-  useEffect(() => { fetchLeads() }, [page, view, pipeline, refreshTrigger])
+  useEffect(() => {
+    fetchLeads()
+  }, [page, view, pipeline, debouncedSearch, refreshTrigger])
 
   // Debounce search
   useEffect(() => {
-    const t = setTimeout(() => { setPage(1); fetchLeads() }, 400)
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 400)
     return () => clearTimeout(t)
-  }, [search, view, pipeline])
+  }, [search])
 
   const handleStatusChange = async (id, status) => {
     setUpdatingId(id)

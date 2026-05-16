@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import {
   Search,
   Bell,
@@ -15,6 +16,14 @@ import {
 export default function Header({ isDark, setIsDark, onLogout }) {
   const [showProfile, setShowProfile] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const navigate = useNavigate()
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      navigate(`/saved-leads?search=${encodeURIComponent(searchQuery.trim())}`)
+    }
+  }
 
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
@@ -26,7 +35,7 @@ export default function Header({ isDark, setIsDark, onLogout }) {
 
         {/* Search Bar (Middle) */}
         <div className="flex-1 max-w-lg mx-auto">
-          <div className="relative">
+          <form onSubmit={handleSearch} className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -35,7 +44,7 @@ export default function Header({ isDark, setIsDark, onLogout }) {
               placeholder="Search leads, companies, or projects..."
               className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
             />
-          </div>
+          </form>
         </div>
 
         {/* Right Actions */}

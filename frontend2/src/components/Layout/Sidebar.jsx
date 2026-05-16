@@ -39,18 +39,18 @@ export default function Sidebar({ collapsed, setCollapsed, onLogout }) {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center gap-3"
             >
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Brain className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden p-1">
+                <img src="https://www.broaderai.com/icon.png" alt="BroaderAI Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-lg tracking-tight">ClientFinder</span>
-                <span className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">AI Analytics</span>
+                <span className="font-bold text-lg tracking-tight">Broader AI</span>
+                <span className="text-[10px] uppercase tracking-widest text-indigo-500 font-bold">ClientFinder</span>
               </div>
             </motion.div>
           )}
           {collapsed && (
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/20">
-              <Brain className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden p-1">
+              <img src="https://www.broaderai.com/icon.png" alt="BroaderAI Logo" className="w-full h-full object-contain" />
             </div>
           )}
 
@@ -104,16 +104,14 @@ export default function Sidebar({ collapsed, setCollapsed, onLogout }) {
               )}
             </div>
             {!collapsed && (
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 flex items-center justify-between">
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 flex items-center justify-center">
                 <button 
                   onClick={onLogout}
-                  className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                  className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all w-full flex justify-center items-center gap-2"
                   title="Logout"
                 >
                   <LogOut className="w-4 h-4" />
-                </button>
-                <button className="p-2 text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all" title="Settings">
-                  <Settings className="w-4 h-4" />
+                  <span className="text-sm font-medium">Logout</span>
                 </button>
               </div>
             )}
