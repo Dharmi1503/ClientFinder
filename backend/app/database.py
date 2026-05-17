@@ -234,6 +234,37 @@ def create_tables() -> None:
             "INSERT OR IGNORE INTO api_keys (key, name, created_by, is_active) VALUES (?, ?, ?, ?)", 
             ("cf_D6yNH96rfM0YdVkEe12neND4rYYzU3E-FEqZHnimw8A", "Master Key", "system", 1)
         )
+        
+        # Auto-seed mock data from real_businesses.json if leads table is empty
+        cur = conn.execute("SELECT COUNT(*) as cnt FROM leads")
+        if cur.fetchone()["cnt"] == 0:
+            seed_path = Path(__file__).resolve().parent.parent / "real_businesses.json"
+            if seed_path.exists():
+                try:
+                    with open(seed_path, "r", encoding="utf-8") as f:
+                        businesses = json.load(f)
+                    for i, b in enumerate(businesses):
+                        score = 82.0 + (i % 15)
+                        label = "HOT" if score >= 88 else ("WARM" if score >= 80 else "COLD")
+                        conn.execute(
+                            """
+                            INSERT INTO leads (
+                                company_name, city, industry, website, phone, email, source, 
+                                label, composite_score, fit_score, intent_score, contact_score, status,
+                                pain_point, decision_maker, estimated_deal_size
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                b.get("name", ""), b.get("city", ""), b.get("industry", ""),
+                                b.get("website", ""), b.get("phone", ""), b.get("email", ""),
+                                b.get("source", "Google Maps"), label, score, int(score + 2), int(score - 2), int(score + 5), 
+                                "New", f"Looking to scale operations in {b.get('city', 'their city')}", "Managing Director", "$12,000"
+                            )
+                        )
+                    print(f"[database] Seeded {len(businesses)} mock leads from real_businesses.json")
+                except Exception as e:
+                    print(f"[database] Failed to seed mock leads: {e}")
+
     print("[database] Tables ready.")
 
 
