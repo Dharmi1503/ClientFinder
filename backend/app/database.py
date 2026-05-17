@@ -228,6 +228,12 @@ def create_tables() -> None:
         _ensure_column(conn, "leads", "instagram_handle",       "TEXT DEFAULT ''")
         _ensure_column(conn, "leads", "pipeline_type",          "TEXT DEFAULT 'main_pipeline'")
         _ensure_column(conn, "leads", "lead_type",              "TEXT DEFAULT 'direct'")
+        
+        # Always inject the primary key so it survives Render ephemeral restarts
+        conn.execute(
+            "INSERT OR IGNORE INTO api_keys (key, name, created_by, is_active) VALUES (?, ?, ?, ?)", 
+            ("cf_D6yNH96rfM0YdVkEe12neND4rYYzU3E-FEqZHnimw8A", "Master Key", "system", 1)
+        )
     print("[database] Tables ready.")
 
 

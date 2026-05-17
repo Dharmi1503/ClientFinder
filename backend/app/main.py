@@ -92,6 +92,11 @@ def require_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> dict:
     """
     if not x_api_key:
         raise HTTPException(status_code=403, detail="Missing API key")
+        
+    admin_key = os.getenv("ADMIN_KEY")
+    if admin_key and x_api_key == admin_key:
+        return {"name": "Admin", "is_active": 1}
+        
     row = get_api_key(x_api_key)
     if not row:
         raise HTTPException(status_code=403, detail="Invalid API key")
