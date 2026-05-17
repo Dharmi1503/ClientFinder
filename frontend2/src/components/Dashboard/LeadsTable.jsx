@@ -32,6 +32,10 @@ export default function LeadsTable({ refreshTrigger }) {
 
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
+  // Keep previous leads visible while fetching — prevents blank flash
+  const [displayLeads, setDisplayLeads] = useState([])
+  const [displayTotal, setDisplayTotal] = useState(0)
+
   const fetchLeads = async () => {
     setLoading(true)
     try {
@@ -40,8 +44,13 @@ export default function LeadsTable({ refreshTrigger }) {
       if (debouncedSearch) params.city = debouncedSearch
       if (pipeline !== 'all') params.pipeline = pipeline
       const data = await apiService.getLeads(params)
-      setLeads(data.results || [])
-      setTotal(data.total || 0)
+      const results = data.results || []
+      const total   = data.total   || 0
+      setLeads(results)
+      setTotal(total)
+      // Only swap display leads when data arrives — no blank flash
+      setDisplayLeads(results)
+      setDisplayTotal(total)
     } catch (err) {
       console.error('LeadsTable fetch failed:', err)
     } finally {
@@ -62,11 +71,13 @@ export default function LeadsTable({ refreshTrigger }) {
     return () => clearTimeout(t)
   }, [search])
 
-  const handleStatusChange = async (id, status) => {
+  const handleStatusChange = async (e, id, status) => {
+    e.stopPropagation()   // prevent row click opening modal
     setUpdatingId(id)
     try {
       await apiService.updateLeadStatus(id, status)
       setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l))
+      setDisplayLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l))
     } catch (err) {
       console.error('Status update failed:', err)
     } finally {
@@ -82,7 +93,7 @@ export default function LeadsTable({ refreshTrigger }) {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(displayTotal / PAGE_SIZE))
 
   return (
     <motion.div
@@ -99,7 +110,7 @@ export default function LeadsTable({ refreshTrigger }) {
             <p className="text-sm text-gray-500">Showing the newest pipeline results by default.</p>
           </div>
           <div className="flex gap-3">
-            <div className="relative">
+            <form onSubmit={e => e.preventDefault()} className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
@@ -108,7 +119,7 @@ export default function LeadsTable({ refreshTrigger }) {
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 pr-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
               />
-            </div>
+            </form>
           </div>
         </div>
 
@@ -153,14 +164,14 @@ export default function LeadsTable({ refreshTrigger }) {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        {loading ? (
+      {/* Table — keep previous data visible during load, dim slightly */}
+      <div className={`overflow-x-auto transition-opacity duration-200 ${loading ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
+        {displayLeads.length === 0 && loading ? (
           <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
             <Loader2 className="w-5 h-5 animate-spin" />
             Loading leads...
           </div>
-        ) : leads.length === 0 ? (
+        ) : displayLeads.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
               <Search className="w-10 h-10 text-gray-400" />
@@ -178,7 +189,7 @@ export default function LeadsTable({ refreshTrigger }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {leads.map((lead) => (
+              {displayLeads.map((lead) => (
                 <motion.tr
                   key={lead.id}
                   initial={{ opacity: 0 }}
@@ -233,10 +244,10 @@ export default function LeadsTable({ refreshTrigger }) {
                   <td className="px-6 py-4 text-gray-600 dark:text-gray-400 text-sm max-w-[160px] truncate" title={lead.pain_point}>
                     {lead.pain_point || '—'}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
                     <select
                       value={lead.status || 'New'}
-                      onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+                      onChange={(e) => handleStatusChange(e, lead.id, e.target.value)}
                       disabled={updatingId === lead.id}
                       className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 disabled:opacity-50"
                     >

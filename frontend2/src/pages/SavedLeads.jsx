@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { 
   Search, 
   Filter, 
-  Download, 
+  Lock, 
   MoreVertical, 
   ExternalLink, 
   Mail, 
@@ -26,6 +26,7 @@ export default function SavedLeads() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('All')
   const [selectedLead, setSelectedLead] = useState(null)
+  const [showAccessDenied, setShowAccessDenied] = useState(false)
   const location = useLocation()
 
   useEffect(() => {
@@ -62,16 +63,8 @@ export default function SavedLeads() {
   }
 
   const exportToCSV = () => {
-    const headers = ['Company', 'Industry', 'City', 'Source', 'Label', 'Score', 'Status', 'Email', 'Phone', 'Website']
-    const rows = leads.map(l => [
-      l.company_name, l.industry, l.city, l.source, l.label, l.composite_score, l.status, l.email, l.phone, l.website
-    ])
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n")
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = `clientfinder_leads_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+    setShowAccessDenied(true)
+    setTimeout(() => setShowAccessDenied(false), 3000)
   }
 
   const filteredLeads = leads.filter(l => {
@@ -83,17 +76,40 @@ export default function SavedLeads() {
 
   return (
     <div className="space-y-8 pb-20">
+
+      {/* Access Denied Toast */}
+      <AnimatePresence>
+        {showAccessDenied && (
+          <motion.div
+            initial={{ opacity: 0, y: -16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -16, scale: 0.95 }}
+            className="fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 bg-gray-900 dark:bg-gray-800 text-white rounded-2xl shadow-2xl border border-red-500/30"
+          >
+            <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+              <Lock className="w-4 h-4 text-red-400" />
+            </div>
+            <div>
+              <p className="font-bold text-sm">Access Restricted</p>
+              <p className="text-xs text-gray-400 mt-0.5">You don't have access to export data. Upgrade your plan.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black text-gray-900 dark:text-white">Saved Leads</h1>
           <p className="text-gray-500 mt-2">Manage and track your high-intent pipeline.</p>
         </div>
-        <button 
+        <button
           onClick={exportToCSV}
-          className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl font-bold text-sm hover:shadow-lg transition-all"
+          disabled
+          title="You don't have access to export data"
+          className="flex items-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl font-bold text-sm text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60 select-none"
         >
-          <Download className="w-4 h-4" />
+          <Lock className="w-4 h-4" />
           Export CSV
         </button>
       </div>

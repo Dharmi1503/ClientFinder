@@ -154,6 +154,17 @@ export const apiService = {
     return api.get('/leads', { params })
   },
 
+  // Demo Search — calls POST /api/search (DB only, no scraping)
+  demoSearch: (data) => api.post('/search', {
+    service:      data.service,
+    industry:     data.industry || data.service,
+    location:     data.location,
+    max_leads:    data.max_leads || 20,
+    budget_range: data.budget_range || '',
+    min_score:    data.min_score || 0,
+    sort_by:      'score',
+  }),
+
   updateLeadStatus: (id, status) => {
     if (USE_MOCK) return Promise.resolve({ success: true })
     return api.put(`/leads/${id}/status`, { status })

@@ -13,7 +13,9 @@ import {
   ShieldCheck,
   TrendingUp,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  ExternalLink as LinkIcon,
+  Globe
 } from 'lucide-react'
 
 export default function LeadDetailsModal({ lead, onClose }) {
@@ -27,7 +29,28 @@ export default function LeadDetailsModal({ lead, onClose }) {
     setTimeout(() => setCopiedType(null), 2000)
   }
 
-  const sections = [
+  const isPlatform = lead.lead_type === 'platform'
+
+  const sections = isPlatform ? [
+    {
+      id: 'bid',
+      title: 'Platform Bid Message',
+      icon: Globe,
+      content: lead.personalized_opener
+        ? `${lead.personalized_opener}\n\n${lead.email_msg || ''}`
+        : lead.email_msg,
+      color: 'bg-orange-500',
+      action: lead.source_url,
+    },
+    {
+      id: 'linkedin',
+      title: 'LinkedIn Message',
+      icon: Linkedin,
+      content: lead.linkedin_msg,
+      color: 'bg-blue-600',
+      action: lead.linkedin_url,
+    },
+  ] : [
     { 
       id: 'whatsapp', 
       title: 'WhatsApp Opener', 
@@ -88,12 +111,17 @@ export default function LeadDetailsModal({ lead, onClose }) {
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{lead.company_name}</h2>
                 <p className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-2">
                   {lead.industry} • {lead.city}
-                  {lead.website && (
+                  {lead.website && !isPlatform && (
                     <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline flex items-center gap-0.5">
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
                 </p>
+                {isPlatform && (
+                  <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-full">
+                    <Globe className="w-3 h-3" /> Platform Lead · {lead.source}
+                  </span>
+                )}
               </div>
             </div>
             <button
@@ -103,6 +131,24 @@ export default function LeadDetailsModal({ lead, onClose }) {
               <X className="w-6 h-6 text-gray-400" />
             </button>
           </div>
+
+          {/* View Post banner for platform leads */}
+          {isPlatform && lead.source_url && (
+            <div className="px-6 py-3 bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200/50 dark:border-orange-800/50 flex items-center justify-between">
+              <span className="text-sm text-orange-700 dark:text-orange-300 font-medium">
+                This lead is a live project post on {lead.source}
+              </span>
+              <a
+                href={lead.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-xl transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Post
+              </a>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
             {/* Strategy Grid */}

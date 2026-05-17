@@ -140,6 +140,10 @@ class FindClientsRequest(BaseModel):
         default=True,
         description="Fast mode skips LinkedIn/News/IndiaMART enrichment. Faster but less data.",
     )
+    mock: bool = Field(
+        default=False,
+        description="Return mock data instead of running the pipeline",
+    )
 
 
 class StatusUpdateRequest(BaseModel):
@@ -285,6 +289,46 @@ async def find_clients(request: FindClientsRequest, background_tasks: Background
         _JOBS[job_id]["message"] = message
 
     async def _run():
+        if request.mock:
+            _JOBS[job_id]["stage"] = "loading_mock"
+            _JOBS[job_id]["message"] = "Loading mock data..."
+            await asyncio.sleep(1) # simulate loading
+            try:
+                import json
+                mock_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scratch", "payload.json")
+                with open(mock_path, "r", encoding="utf-8") as f:
+                    mock_data = json.load(f)
+                
+                pr = mock_data.get("pipeline_run", {})
+                dir_result = {
+                    "total_saved": pr.get("after_contact_gate", 20),
+                    "hot": pr.get("hot_count", 0),
+                    "warm": pr.get("warm_count", 0),
+                    "cold": pr.get("cold_count", 0),
+                    "leads": mock_data.get("leads", []),
+                    "scrape_date": date.today().isoformat()
+                }
+                result = {
+                    "directory_pipeline": dir_result,
+                    "intent_pipeline": { "total_saved": 0, "hot": 0, "warm": 0, "cold": 0, "leads": [] },
+                    "total_saved": dir_result["total_saved"],
+                    "hot": dir_result["hot"],
+                    "warm": dir_result["warm"],
+                    "cold": dir_result["cold"],
+                    "scrape_date": dir_result["scrape_date"]
+                }
+                
+                _JOBS[job_id]["status"] = "done"
+                _JOBS[job_id]["stage"] = "done"
+                _JOBS[job_id]["message"] = "Mock data loaded."
+                _JOBS[job_id]["result"] = result
+            except Exception as exc:
+                _JOBS[job_id]["status"] = "error"
+                _JOBS[job_id]["stage"] = "error"
+                _JOBS[job_id]["message"] = str(exc)
+                _JOBS[job_id]["error"] = str(exc)
+            return
+
         try:
             directory_result, intent_result = await asyncio.gather(
                 run_pipeline(
@@ -537,6 +581,67 @@ async def get_leads(
         "page": page,
         "page_size": page_size,
         "results": leads,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Demo Search — instant DB-powered search (no scraping)
+# ---------------------------------------------------------------------------
+
+class DemoSearchRequest(BaseModel):
+    service: str = Field(..., description="Service to sell, e.g. 'AI Automation'")
+    industry: Optional[str] = Field(None, description="Target industry, e.g. 'Hospitals'")
+    location: str = Field(..., description="City, e.g. 'Mumbai'")
+    max_leads: int = Field(default=20, ge=1, le=100)
+    budget_range: Optional[str] = Field(None, description="e.g. '₹25k–₹1L'")
+    min_score: int = Field(default=0, ge=0, le=100)
+    sort_by: str = Field(default="score", description="score | recent")
+
+
+@app.post("/api/search")
+async def demo_search(body: DemoSearchRequest, api_key: dict = Depends(require_api_key)):
+    """
+    Demo-mode AI search: instantly returns filtered leads from the DB.
+    No scrapers are triggered. Results feel instant.
+    """
+    from app.demo_config import DEMO_MODE
+    if not DEMO_MODE:
+        raise HTTPException(status_code=503, detail="Live mode not available in this build.")
+
+    # In the DB, `industry` column stores the SERVICE name (e.g. "AI Automation")
+    # and `description` stores the industry tag. So we filter by service.
+    total, leads = get_all_leads(
+        city=body.location,
+        category=body.service,          # `category` maps to `industry` column = service name
+        min_score=body.min_score,
+        sort_by=body.sort_by,
+        page=1,
+        page_size=body.max_leads,
+    )
+
+    # Enrich each lead with demo AI fields for the card display
+    enriched = []
+    for lead in leads:
+        score = lead.get("composite_score", 0)
+        enriched.append({
+            **lead,
+            "growth_potential": "High" if score >= 85 else ("Medium" if score >= 70 else "Low"),
+            "lead_quality":     "Premium" if score >= 85 else ("Good" if score >= 70 else "Fair"),
+            "ai_recommendation": lead.get("hot_reason") or lead.get("pain_point") or "Implement a tailored digital strategy.",
+            "website_status":   "Live" if lead.get("website_alive") else "Missing",
+        })
+
+    return {
+        "demo_mode": True,
+        "total": total,
+        "returned": len(enriched),
+        "query": {
+            "service": body.service,
+            "industry": body.industry,
+            "location": body.location,
+            "max_leads": body.max_leads,
+        },
+        "results": enriched,
     }
 
 

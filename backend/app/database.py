@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS leads (
     intent_signal       TEXT    DEFAULT '',
     description         TEXT    DEFAULT '',
     pipeline_type       TEXT    DEFAULT 'main_pipeline',  -- main_pipeline / intent_pipeline
+    lead_type           TEXT    DEFAULT 'direct',         -- direct / platform
     created_at          TEXT    DEFAULT (datetime('now')),
     updated_at          TEXT    DEFAULT (datetime('now'))
 );
@@ -225,6 +226,7 @@ def create_tables() -> None:
         _ensure_column(conn, "leads", "pain_template",          "TEXT DEFAULT ''")
         _ensure_column(conn, "leads", "instagram_handle",       "TEXT DEFAULT ''")
         _ensure_column(conn, "leads", "pipeline_type",          "TEXT DEFAULT 'main_pipeline'")
+        _ensure_column(conn, "leads", "lead_type",              "TEXT DEFAULT 'direct'")
     print("[database] Tables ready.")
 
 
@@ -531,6 +533,7 @@ def save_lead(lead: dict) -> int:
         "intent_signal":       (lead.get("intent_signal") or "")[:500],
         "description":         (lead.get("description") or lead.get("snippet") or "")[:500],
         "pipeline_type":       (lead.get("pipeline_type") or "main_pipeline")[:50],
+        "lead_type":           (lead.get("lead_type") or "direct")[:20],
     }
 
     with _get_conn() as conn:

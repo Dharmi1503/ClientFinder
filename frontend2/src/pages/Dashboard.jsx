@@ -72,7 +72,7 @@ export default function Dashboard() {
       <section className="glass rounded-[2.5rem] p-8 border border-white/20 dark:border-white/5">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-bold tracking-tight">Performance Overview</h2>
-          <button className="text-sm font-bold text-indigo-500 hover:text-indigo-600 transition-colors">View Detailed Analytics →</button>
+          <Link to="/analytics" className="text-sm font-bold text-indigo-500 hover:text-indigo-600 transition-colors">View Detailed Analytics →</Link>
         </div>
         <StatsCards refreshTrigger={refreshTrigger} />
       </section>

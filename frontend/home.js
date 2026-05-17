@@ -135,6 +135,7 @@ async function runPipeline(event) {
     budget_range: formData.get("budget_range"),
     max_leads: Number(formData.get("max_leads")),
     fast_mode: pipelineForm.elements.fast_mode.checked,
+    mock: pipelineForm.elements.mock ? pipelineForm.elements.mock.checked : false,
   };
 
   runBtn.disabled = true;
